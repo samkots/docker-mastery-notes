@@ -1,0 +1,1282 @@
+
+Docker Mastery notes:
+
+---
+
+[n] - section
+
+n > - chapter
+
+---
+
+[1] Quick start
+
+1 > Principle: Build, Ship, and Run
+2 > labs.play-with-docker.com
+	login with DockerHub account
+
+
+[2] Course instructions
+
+5 > All examples and assignments:
+	https://github.com/bretfisher/udemy-docker-mastery
+	clone in user directory(/Users/<user> for Mac) - doesn't matter for linux
+		~-> ensures docker works correctly on Mac/Windows
+
+6 > Discord channel: "Cloud Native DevOps"
+7 > Youtube channel: "Bret Fisher Docker and DevOps" - AMA every Tuesday
+8 > The big FAQ
+
+
+[3] The best way to setup docker for your OS
+
+9 >
+Docker Desktop - bundle of tools to run docker locally - best way to learn in the beginning
+	subscription service, but free for learning even on company computer
+OCI [Open Container Initiative] - standard for containers, images and registries
+@8:55 - alternatives to Docker Desktop
+
+
+TODO: chapters 12, 13, 14
+
+
+[4] Creating and using containers like a boss
+
+17 >
+`$ docker version` - to check if the client can talk to the server & is working properly
+`$ docker info` -> config values of docker engine
+
+New CLI style: docker <command> <sub-command> <options>	- better organized
+Old CLI style: docker <command> <options> - still supported
+
+18 >
+`$ docker containers run --publish 80:80 --detach nginx`	- `-p` format is <host:container>
+	-> download & run nginx image from the default registry hub.docker.com
+	-> always runs a *new* one & NOT an existing one.. use `start` for existing one
+
+`$ docker container ls` -> running containers
+`$ docker container ls -a` -> all containers
+`$ docker container stop <container ID (initial unique part)>`
+
+`$ docker container logs <container-name>`
+`$ docker container top <container-name>` -> processes inside the container
+`$ docker container rm <container-name>...` -> remove container(s)
+
+20 >
+People compare containers to VMs.. there are some similarities but there are so many things that aren't same
+	let's not even compare them to VMs
+
+A container ~ just a process running on host
+	with limited resources
+	exits when the process stops
+
+`$ docker container top` -> processes "inside" the container
+	this process can be seen running on the host(`$ ps -aux`) with different pid!
+
+21 >
+Images are always OS & arch specific (of course)
+
+24 > What's going on inside running containers:
+`$ docker container top <container>` -> processes running inside container
+`$ docker container inspect <container>` -> lot of data, how it was started etc.
+`$ docker container stats <container>...` -> CPU/Mem etc. usage
+
+
+26 > Running a container and also getting a shell inside it, SSH not needed
+`$ docker container run -it` -> run interactively
+	-i => interactive
+	-t => get tty to it
+
+Ex. `$ docker container run -it --name proxy nginx bash` -> bash ~ optional root command to replace the default one
+	`$ exit` -> the container exits when the root command exists
+
+You can do that for distro containers!:
+`$ docker container run -it --name ubuntu ubuntu` -> The command is by default bash for distros!
+	They are minimal, so you can install whatever with apt-get and exit -> stops the container
+	Alpine Linux is the smallest: <5MB, no bash only sh
+
+>> Starting it again has all those packages installed!:
+`$ docker container start -ai <container-name>` -> -ai(attach interactive) instead of -it
+
+>> To attach to already running container:
+`$ docker container exec -it <container> <cmd>`
+	ex. `$ docker container exec -it ubuntu bash`
+	`$ exit` won't stop the container as `bash` wasn't the root process
+
+27 > Docker Networks
+
+Docker concept: "Batteries included, but removable"
+	For local dev/testing, defaults of networks usually just work
+
+Whenever you start a container, in the background, you are connecting to a particular docker network
+	by default the bridge(or docker0) networks
+	each of those networks rout out through a NAT firewall(on host IP), which is actually the docker daemon configuring
+		the host IP address on it's default interface, so the containers can get out to the internet or rest of the network
+
+But we don't need to use -p option when we have specific containers wanting to talk to each other inside our host
+Best practice is to create a networks for each application, example:
+	network "my_web_app" for mysql & php/apache containers
+	another network "my_api" for mongo & nodejs containers
+
+	Without exposing the ports with `-p` these containers can talk to each other within their networks
+		but not outside of their virtual networks
+
+	So for examples, the "my_web_app" network can have only the php/apache container exposing it's port and not the mysql one
+		this way, they can talk to each other but only php/apache can talk to the outside world
+
+But all of this is configurable
+	you can create multiple virtual networks, may be 1 per app or based on security requirements
+		like a real physical computer with two NICs you can have two virtual networks connected to one container
+	Or you can have the container talk to no network
+	Or you can skip the OOTB virtual network config and use `--net=host`
+		you will lose some containerization benefits, but sometimes, it may be required
+
+
+`$ docker container port <container>` -> shows port mapping like: 80/tcp -> 0.0.0.0:80 (part of `docker container ls` output)
+
+We haven't talked about the IP address yet..
+
+`$ docker container inspect --format '{{ .NetworkSettings.IPAddress }}' webhost` -> container IP address
+	- `-format '...'` is just for clean ouput(Go templates), can also use grep
+
+@6:40 good hand drawn diagram explanation
+
+Reminder: there can't be 2/more containers listening on the same port of the host
+
+28 > Minor correction
+nginx has now removed the ping command
+	for the examples in the next videos, instead of nginx, use nginx:alpine image for the examples
+	or install it with apt-get
+
+29 > CLI management of virtual networks
+Commands:
+`$ docker network ls` -> network list
+`$ docker network inspect` -> all details
+`$ docker network create --driver` -> create new network optionally specifying a driver
+
+`$ docker network connect`
+`$ docker network disconnect`
+	these commands change the live running container so that a new NIC is created on a virtual network for that container
+	it's like sticking a NIC in a computer while it's running
+
+
+Typical default networks:
+	bridge/docker0 - the default bridge network
+	host - the special network that skips the docker's virtual network & attaches the container directly to the host interface
+		prevents the security boundaries of the containerization from protecting the container interface
+		but in some cases, can improve the performance of high throughput networking etc.
+	none - kind of equivalent of having an interface on the computer that's not attached to anything
+
+
+Examples:
+`$ docker network create my_app_net` -> creates new network with the default driver bridge
+	the bridge driver simply creates a virtual network locally with it's own subnet somewhere around 172.17 & above
+	goes incrementally like 18, 19, 20...  it doesn't have any advanced features like overlaied networks that allow
+	privet networking between hosts and other 3rd party drives like Weave
+
+`$ docker container run --network my_app_net nginx` -> creates a new container in that network
+
+`$ docker network connect <network> <container>` -> dynamically creates a NIC in the container on the given virtual network
+	now the existing container is on two networks(assuming it was on one before)
+`$ docker network disconnect <network> <container>`
+
+
+"If you are running all the apps on a single server, you are able to really protect them. Because in the physical world we
+would be creating VMs and hosts in a network, we would often overexpose the ports and networking on our application servers
+But here, you would put all your app containers in one network in a virtual network, you will only expose the ports on your
+hosts that you specifically use the `-p` with. And everything else is a little bit safer with that protected firewall inside
+their virtual network"
+
+So the front-end/back-end sit in the same Docker network and their internal communication never leaves the host.
+All externally exposed ports are closed by default. You must manually export via `-p`, which is a good default security.
+
+Later we will see Docker Swarm multi-host networking and how it gets better when we scale up and scale out.
+
+30 > DNS
+
+Forget IPs: Static IPs and using IPs for talking to containers is an anti-pattern. Do your best to avoid it.
+
+As containers are constantly launching, disappearing, moving, expanding, and shrinking, we can't rely on IPs for talking.
+No guarantee that the IP will remain the same any time.. a container my go down and Docker may bring it up somewhere else.
+Too dynamic!
+Builtin solution: DNS
+	Docker uses the container names as the equivalent of host names for containers talking to each other.
+	Docker defaults to container names as the host names but you can also set aliases.
+
+The new network we created(not the default bridge one) gets a special new feature:
+	auto DNS resolution for all the containers in that virtual network from all the other containers in that virtual network
+		using their container names, regardless of their IP addresses
+
+	`$ docker container exec -it cont-1 ping cont-2` - cont-1 can ping cont-2 in the same network
+
+The default bridge network doesn't have the DNS server built into it by default.
+	There, you can use the `~ container create --link <list>` option to manually specify links between the bridge network.
+	But it's just easier to create a new network for your apps so you don't have to do this every time. (recommended always)
+		And wit docker compose it gets even easier.
+
+I think it works on the same hosts as well as across hosts. TODO: check
+
+
+31 > Assignment: check virsions of curl on Ubuntu 14.04 and CentOS 7
+32 > Assignment answer
+Just do:
+	`$ docker container run -it --name ubuntu ubuntu:14.04`
+	`$ apt-get update && apt install curl`
+	`$ curl --version`
+		-> 7.35.0
+
+	`$ docker container run -it --name centos centos:7`
+	`$ yum update curl`
+	`$ curl --version`
+		-> 7.29.0
+
+33 > Correction in next assignment:
+elasticsearch:2 is old and requires x86_64 architecture you can use "bretfisher/httpenv" image instead, a simple web server
+
+34 > DNS round robin testing
+
+DNS round robin => you can have two different hosts with DNS aliases that respond to the same DNS name
+	like google.com having more than 1 server for being up 24/7 => multiple IP address beind the name used on the internet
+	in containers, it gets a lot simpler
+
+Docker engine 1.11 & above: we can have multiple containers on a created network respond to the same DNS name
+Task:
+	- create a new virtual network
+	- in it, create two containers from elasticsearch:2 image
+		research & use `--network-alias search`(of `docker container run`) option
+			to give additional DNS name(along with it's container name) to respond to
+
+			this solves a little problem: you can't add multiple containers with the same name, but how can you resolve
+				DNS on the network and maybe have the same app installed twice.. maybe for dev & test env on the same
+					Docker server and want to call both of them "search" in the DNS
+
+	- use alpine image to use nslookup: `alpine nslookup search` with `--net` ~-> list of DNS addresses for the name search
+	- run `centos curl -s search:9200` with `--net` multiple times until you see both "name" fields show
+		elasticsearch gives itself random names when it first stats up(like containers)
+		so when you run curl multiple times, the request can randomly go to any of them and you can identify by the name
+		"it's not a true one but a poor man's load balancer"
+
+I did:
+`$ docker network create tmpnet`
+`$ docker container run -d --network tmpnet --network-alias search --name else-1 elasticsearch:2`
+`$ docker container run -d --network tmpnet --network-alias search --name else-2 elasticsearch:2`
+`$ docker container run --rm --network tmpnet -it --name alpine alpine`
+	`$ nslookup else-1` -> shows name "else-1" & it's IP address
+	`$ nslookup else-2` -> shows name "else-2" & it's IP address
+	`$ nslookup search` -> shows nane "search" & both the above IP addresses
+	`$ apk --no-cache add curl`
+	`$ curl -s search:9200`
+	& repeat...
+		-> request is randomly redirected to one of the servers
+
+Then cleaned up the containers.
+
+
+35 > Answers:
+
+These are interchangeable: --net & --network and --net-alias --network-alias
+
+`$ docker network create dude`
+`$ docker container run -d --net dude --net-alias search elasticsearch:2`
+`$ docker container run -d --net dude --net-alias search elasticsearch:2`
+
+`$ docker container ls`
+	-> The ports shown are exposed inside the virtual network. `-p` is needed only for exposing the ports to the host.
+
+`$ docker container run --rm --net dude alpine nslookup search`
+	-> shows nane "search" & both the above IP addresses
+
+`$ docker container run --rm --net dude centos curl -s search:9200`
+& repeat...
+	-> request is randomly redirected to one of the servers
+
+Then cleaned up the containers.
+
+
+
+[5] Container Images, Where To Find Them and How To Build Them
+
+36 > What's an image (and what isn't)
+
+What's an image: Application binaries and dependencies of your app and the metada about how to run it.
+Official definition: ordered collection of root filesystem chages and the corresponding execution params
+	for use withing a container runtime
+
+There's no complete OS, no kernel, no kernel modules(like drivers)
+It can be as small as 1 file(your app binary) like a Go static binary or
+	as big as an entire distro with it's package manager, apache, PHP, source code, whatever installed packages.. multi GBs!
+
+
+Official Docker image spec: https://github.com/moby/moby/blob/master/image/spec/v1.md
+	moved to: https://github.com/moby/docker-image-spec
+
+Commands: res/dm-s04-commands.txt
+
+
+
+37 > The Docker Hub
+
+Sign in -> dashboard -> shows your repos(public/private), you won't have any yet.
+Search: nginx -> huge results
+	on the top there's the official image (It has the word "official" below it & It's name is plain & doesn't contain '/')
+	all other images names look like ≈ <account-name>/nginx
+	Docker Inc. has a team of people for the official ones that usually works with the official team that makes that software
+		~-> proper documentation, well tested, their Dockerfiles follow best practices
+Official images are the best way to start.
+
+Their versions(nginx example):
+- 1.11.9, mainline, 1, 1.11, latest (mainline/jessie/Dockerfile)
+- 1.11.9-alpine, mainline-alpine, 1-alpine, 1.11-alpine, alpine (mainline/alpine/Dockerfile)
+- 1.10.3, stable, 1.10 (stable/jessie/Dockerfile)
+- 1.10.3-alpine, stable-alpine, 1.10-alpine (stable/alpine/Dockerfile)
+
+Each bullet above is one version with all those tags referring to that same version
+	Unless you specify the exact version, you automatically get the latest of the unspecified part
+	It's best to use the exact versions(like nginx:1.11.9)
+		as you will usually wanna control the upgrade process with some other devops tool
+
+jessie is a Debian distro, alpine is an extremely small Linux distro: < 5MB
+
+"latest" is a special tag. Plain image name(like nginx) means the latest version
+
+`$ docker image ls` -> shows all the downloaded images
+	entries with the same image id(cryptographic SHA) are actually only one image
+
+Docker hub is like GitHub. Anyone can create new/modify existing images and upload their own images
+	number of stars & pulls is a good indicator of their quality.. you can check the source code if the link is provided.
+
+
+List of official docker images: https://github.com/docker-library/official-images/tree/master/library
+
+
+38 > Images and their layers: discover the image cache
+
+Union file system:
+	Images are made up of layers. Evert image starts with a blank layer called scratch
+	and then every set of change that happen after that on the FS in the image is another layer.
+	There can be dosens of them, some may be empty with no change(only metadata change).
+	Every layer has it's own unique SHA
+
+`$ docker image history <image-with-tag>` -> history of layers
+
+
+Example: 
+	You may have Ubuntu layer at the very bottom.
+	Then you create a Dockerfile which add some more files -> another layer
+	Then you make an env variable change -> another layer
+
+	If there's another image that also uses Ubuntu, with it's own changes on top of it,
+		the same Ubuntu layer in your cache is shared.
+
+	=> no duplicate storage, download, or upload
+
+
+When you run an image, the docker creates a new read/write layer for the running container on top of the image layers.
+It follows COW. When you make change to a file in a running container, the file is copied in the container layer
+	and then modified there.
+
+
+`$ docker image inspect <image>` -> all image details(the metadata part of the binaries & metadata that the image contains)
+	exposed ports, env variables, cmd, author, arch and much more
+
+
+Docker docs on images & containers: https://docs.docker.com/storage/storagedriver/
+
+
+39 > Image tagging and pushing to Docker hub
+
+`$ docker image tag --help`
+
+Images don't technically have names. `$ docker image ls` output has not name column. It has repository, tag, & image ID
+Besides the image ID(which we don't remember), we have to refer to them with three different pieces of information.
+
+Repository: <username/org>/<repository> (only <repository> for official images as they live at registery's root namespace)
+	example:
+		bretfisher/nodemongoapp
+		mysql						<- official
+
+Tag: Not quiet a version or branch. It's kind of like git tags.. kind of little bit of both.
+	It's really just a pointer to a specific image commit and could be anything into that repository
+
+How do we create new layer?
+	You can create your own Dockerfile and create your own custom image
+	But we can also retag existing images
+
+`$ docker image tag <source-image>[:<tag>] <target-image>[:<tag>]`
+
+Default tag is "latest" which doesn't necessarily mean latest software. You can take old software and tag it "latest".
+	It could just have been called "default".
+	But you can trust the official images to contain the latest stable version of the software.
+
+
+Example: `$ docker image tag nginx bretfisher/nginx` -> creates new tag with same image ID
+
+But it doesn't yet exist on the Docker Hub. You need to push it.
+`docker push` uploads changed layers to an image registry(default is Hub)
+
+Needs login:
+`$ docker login` -> stores authentication key to ~/.docker/config.json(now Mac stores in Keychain for better security)
+`$ docker logout` -> do this to remove it if you don't trust the machine.. always do this on shared machines/servers
+
+`$ docker image push bretfisher/nginx` -> uploads the layers, Docker Hub dashboard now shows your new image(tag)
+
+Now, if you assign yet another new tag & push:
+`$ docker image tag bretfisher/nginx bretfisher/nginx:testing`
+`$ docker image push bretfisher/nginx:testing` -> says "layer already exists" for all the layers => no duplicate upload
+	Docker Hub dashboard now shows both the tags
+
+Similar to GitHub, you can create a private repository and push to it.
+
+
+40 > Building images: Dockerfile basics
+
+Dockerfile(default name): recipe for creating images. Made up of stanzas. Each stanza is a layer => top-down order matters.
+
+course-git-repo:dockerfile-sample-1/Dockerfile
+
+
+`FROM` is must. Distro images are mainly used for their package managers. Alpine is common these days.
+`FROM scratch` => start with an empty container
+
+`ENV <key> <value>`
+
+`RUN <bash-command>` -> mainly for installing packages, unzipping, editing file inside the container
+	can also run scripts copied earlier in file (any command accessible inside the container at that point in the file)
+
+As each stanza has it's own layer, `RUN <cmd> && <cmd> && <cmd>` -> all commands in the same layer.
+
+By default, no TCP/UDP ports are open inside a container. It doesn't expose anything from a container to the virtual network
+unless listed:
+	`EXPOSE <port>s...`
+
+nginx example: `EXPOSE 80 443` - as nginx is a web & proxy server
+
+	This doesn't mean these ports are gonna be opened automatically on our host. That is done by the `-p` option
+
+`CMD ["<cmd>", "<option>"s...]` - required, final command to run every time a new container is launched (or stopped restarted)
+
+
+Dockerfile command details: https://docs.docker.com/reference/dockerfile/
+
+
+41 > Building images: running docker builds
+
+`$ docker image build -t customnginx .` - using locally without pushing to Hub.. so no need of account name before the name
+	runs each stanza and prints a hash for each => each layer stored in the cache
+		=> next time if the line isn't changed, it won't be rerun
+	
+	If a stanza changes, every stanza from that onwards is rerun, all previous ones are just "using cache" when building
+
+	That's why the order matters.
+		Best practice: things that change the list go at the top, things that change the most go at the bottom of the file.
+
+
+42 > Building images: extending official images
+
+course-git-repo:dockerfile-sample-2/
+	there is a Dockerfile and an index.html
+
+Dockerfile:
+	FROM nginx:latest					# using official images -> lot easier to maintain this Dockerfile
+	WORKDIR /usr/share/nginx/html		# just cd into that directory. Recommended over `RUN cd ...`
+											# here we are changing nginx's default dir to html files
+	COPY index.html index.html			# copy our custom homepage into the image
+	# No need of `CMD` as it's in the `FROM`ed image. We inherit everything from there
+
+`$ docker image build -t nginx-with-html .` - very quick as nginx was already in the cache
+
+You can check the original nginx home page changed in this one when you run a container from it.
+
+You need to tag it to push to the Hub:
+
+`$ docker image tag nginx-with-html:latest bretfisher/nginx-with-html:latest`
+
+43 > Assignment
+course-git-repo:dockerfile-assignment-1/Dockerfile
+
+44 > Assignment answer
+
+45 > Using prune to keep the docker clean
+
+His YouTube video: https://youtu.be/_4QzP7uwtvI
+
+`$ docker image prune` -> cleans up just the 'dangling' images
+`$ docker system prune` -> cleans up everything you are not using currently
+`$ docker system df` -> space usage
+
+
+
+[6] Persistent data: volumes
+
+46 > Container lifetime & persistent data
+
+Containers are meant to be immutable & ephemeral => temporary
+"immutable infrastructure" => only re-deploy containers, never change
+Ideally, the container shouldn't contain the data generated by the app within - "separation of concerns"
+
+The containers we are using so far are persistent: any change in them were kept across restarts,
+	it's only when we removed the container, the UFS layer went away
+
+But we want to be able to do that at will.
+This problem of "persistent data" is new to containers as traditional apps have been persistent by default.
+
+Two solutions:
+1. Data volumes: create special location outside the container UFS to store data, preserved across container removals and
+	can be attached to any container. Container sees it like a local file path.
+2. Bind mounts: sharing of host directory or file into the container.
+	Container sees it like a local path and doesn't know that it is coming from the host.
+
+Intro to immutable infra concepts: https://www.oreilly.com/radar/an-introduction-to-immutable-infrastructure/
+The 12 factor app: https://12factor.net/
+12 fractured app: https://medium.com/@kelseyhightower/12-fractured-apps-1080c73d481c#.cjvkgw4b3
+Docker storage info in Docker docs: https://docs.docker.com/storage/
+res/dm-s05-commands.txt
+res/s05-volumes-slides.pdf
+
+
+47 > Data volumes
+
+Example: official mysql Dockerfile:
+`VOLUME /var/lib/mysql` - creates a new volume location & assign to this dir(the default mysql DBs location) in the container
+	all the files there will outlive the container until we manually delete the volume
+
+`$ docker inspect <container>` -> info displayed in: "Config" > "volume" and "Mounts" > {}
+	- also shows location on host and other details
+`$ docker volume ls` -> lists volume IDs
+`$ docker volume inspect <volume-id>`
+
+The CLI equivalent of the Dockerfile `VOLUME /var/lib/mysql` stanza:
+`$ docker container run ... -v /var/lib/mysql`
+
+But you don't get clear idea of what volume is what based on just IDs. Rather, you can create a named volume:
+`$ docker container run ... -v msql-db:/var/lib/mysql`
+	-> friendlier name(and also the source location)
+
+You can also create volumes separately:
+
+`$ docker volume create` - allows to specify a different driver(the default is "local")
+
+
+48 > Shell differences for path expansion
+
+When using shells parameter expansion instead of a literal path(like `$(pwd)`) remember the shell differences
+Linux/macOS bash, sh, zsh, and Windows Docker Toolbox Quickstart Terminal: `$(pwd)`
+PowerShell:		`${pwd}`
+cmd.exe:		`%cd%`
+
+
+49 > Bind mounts
+
+Map host file or dirs into a container file or directory. Skips the UFS and lives beyond the containers.
+	If the mapped file already exists in the container, the host file is seen while the bind mount exists.
+		Running the container without the bind mount will show the file in the container.
+
+Can't use in Dockerfile, must be in `$ docker container run` as bind mounts are host specific and need specific data
+	to be on the host HDD in order to work.
+
+`$ docker run ... -v /Users/sam/stuff:/path/in/container` (Linux/Mac)
+`$ docker run ... -v //c/Users/sam/stuff:/path/in/container` (Windows)
+
+	Note: It's considered as bind mount instead of a named volume if it starts with a '/'
+
+Example: from the previous assignment: course-git-repo:dockerfile-sample-2/
+
+`$ docker container run -d --name nginx -p 80:80 -v $(pwd)/:/usr/share/nginx/html nginx`
+
+Now changing the files on the hosts reflects the changes into the container and vice versa!
+Great for development environments.
+
+
+50 > DB passwords in containers (update for further course videos)
+
+DBs need passwords but the mysql image & few others like redis had always allowed to
+	just do `$ docker run` & run without a password
+
+But later it changed.
+Now you need to either set a password: `POSTGRES_PASSWORD=mypasswd` or
+tell it to ignore password: `POSTGRES_HOST_AUTH_METHOD=trust`
+
+This wouldn't break if the versions were pinned.
+	But Bret only pins to the minor version in the course: 9.6 rather than 9.6.16
+	for to prevent major changes from breaking yet also using the latest patches.
+
+In this *very rare case* the official postgres maintainer decided to introduce a breaking change
+	in the *image* to a patch release of the app. The two aren't related.
+
+"This is a weakness of the Docker Hub model. There's no version of the Docker Hub image really, it's just tracking
+the upstream postgres versions.. so then if any Docker Hub change would break something, it can't easily be tracked as
+a separate version from the app itself."
+
+So, always pin the whole image version for the things you care about.
+
+
+51 > Updates for the next videos
+
+Where Postgres "old" & "new" versions are mentioned, you can use postgres:15.1 and postgres:15.2.
+
+52 > Assignment: volumes
+
+
+Container best practice:
+	Don't update the applications in the container, but rather replace the container with the new version.
+
+Launch postgress 9.6.1 container with a named volume, refer Docker Hub for the path.
+Container displays many initial logs.
+Stop the container.
+Launch a new container with postgres 9.6.2 with the same volume.
+Very few logs are displayed, as the volume data persists.
+
+53 > arm64 and Apple Silicon need newer versions of Postgress which need a password: `-e POSTGRES_PASSWORD=mypassword`
+
+54 > Assignment answer
+
+`$ docker container run -d --name psql1 -v psql:/var/lib/postgresql/data postgres:9.6.1`
+`$ docker container logs -f psql1` -> more logs
+`$ docker container stop psql1`
+`$ docker container run -d --name psql2 -v psql:/var/lib/postgresql/data postgres:9.6.1`
+`$ docker container logs -f psql2` -> less logs
+
+
+55 > File permissions across multiple containers
+
+Docker Desktop automatically translates permissions from your host(MacOS/Windows) into container(Linux)
+
+But when working on pure Linux servers with just `dockerd`, no translation is made.
+(Pure Linux hosts like production server setups).
+File permissions problems can occur with container apps not having the permissions they need:
+	- multiple containers accessing the same volume.
+	- bind mounting existing files into containers.
+
+File ownership between containers and host are just numbers.
+Some commands(`ls -l`) show friendly usernames which are just name-to-number aliases from `/etc/passwd` `/etc/group`.
+The kernel only deals with the IDs. These files(i.e. the mappings) will be different in different containers and the host.
+No issues when a container is accessing it's own files. But for multiple containers accessing the same volume or bind-mount,
+problems can arise in 2 ways:
+1. `/etc/passwd` is different on across containers.
+Different friendly usernames will be shown for the same file because of the different mappings.
+So, Bret only cares about the IDs when trying to sunc up permissions.
+"Different names are fine, because it's only ID that counts.
+	Two processes trying to access the same file, must have a matching user ID or user group ID."
+
+2. Your two containers are running as different users.
+
+Maybe the user/group IDs and/or the USER statement in your Dockerfiles are different,
+	and the two containers are technically running under different IDs.
+Different apps will end up running as different IDs.
+	For example, the node base image creates a user called node with ID 1000,
+		but the NGINX image creates an nginx user as ID 101.
+Also, some apps spin-off sub-processes as different users.
+	NGINX starts its main process (PID 1) as root (ID 0) but spawns
+		sub-processes as the nginx user (ID 101), which keeps it more secure.
+
+Troubleshooting methods of Bret:
+1. `$ ps aux` in each container -> list of processes and usernames.
+	The process needs a matching user ID or group ID to access the files in question.
+2. Find the UID/GID in each containers `/etc/passwd` and `/etc/group` to translate names to numbers.
+	You'll likely find there a miss-match, where one containers process originally wrote the files with its UID/GID
+	and the other containers process is running as a different UID/GID.
+3. Figure out a way to ensure both containers are running with either a matching user ID or group ID.
+	This is often easier to manage in your own custom app (when using a language base image like python or node)
+	rather than trying to change a 3rd party app's container (like nginx or postgres), but it all depends.
+	This may mean creating a new user in one Dockerfile and setting the startup user with USER
+	(USER docs: https://docs.docker.com/reference/dockerfile/#user).
+	The node default image has a good example of the commands for creating a user and group with hard-coded IDs
+	(https://github.com/nodejs/docker-node/blob/6256caf2c507e7aafdeb8e7f837bab51f46f99e0/17/bullseye/Dockerfile#L3-L4):
+	```
+	RUN groupadd --gid 1000 node \\
+			&& useradd --uid 1000 --gid node --shell /bin/bash --create-home node
+	USER 1000:1000
+	```
+
+Note: When setting a Dockerfile's USER, use numbers, which work better in Kubernetes than using names.
+Note 2: If `ps` doesn't work in your container, you may need to install it.
+
+
+56 > Assignment: bind mounts
+
+Use the Jekyll static site generator to start a local web server.
+course-git-repo:bindmount-sample-1 - source code on host.
+Jekyll container watching those file and auto detecting the updates.
+
+`$ docker container run -p 80:4000 -v $(pwd):sitebretfisher/jekyll-serve` from that directory
+
+Make changes to the file under `_posts` dir.
+See the changes reflected on the web page.
+And look at the logs in the container.
+
+Jkyll site: https://jekyllrb.com/
+
+57 > Answer (follow along)
+
+
+
+[6] Making It Easier with Docker Compose: The Multi-Container Tool
+
+
+58 > Docker Compose and the docker-compose.yml
+
+Configure relationships between containers
+Save container run settings in file
+Two parts:
+	docker-compose.yml file(default name or `-f`): containers, networks, volumes
+	`$ docker-compose` - used normally for local dev/test
+
+The format has it's own versions(first line of the file): 1 - Initial "Fig" version, 2, 2.1, 3, 3.1
+	Starting with v1.3 these fiels can even directly be used with the `docker` CLI in production with Swarm.
+
+No version => 1.0 -- less features -- not recommended -- Bret starts with minimum 2 and 3/3.1 if needed
+
+Main sections:
+services: they are really just containers -- called services as there can be multiple of those containers for redundancy.
+```yml
+services:
+  myservicename: # can be whatever friendly name. This is also DNS name inside network
+    image: # optional if you use build
+	command: # optional -- replace the default image cmd
+	environment: # optional --same as `-e` option
+	volumes: # optional -- same as `-v` option
+
+  myservicename2:
+
+volumes: # optional -- same as `$ docker volume create`
+
+networks: # optional -- same as `-v` in `$ docker run`
+```
+
+Basically this is for not having to type all the commands over and over again, but better than shell scripts.
+Example from Jekyll section(same as `$ docker container run -p 80:4000 -v $(pwd):/site bretfisher/jekkyll-serve`):
+```
+version '2'
+
+services:
+  jekyll:
+    image: bretfisher/jekkyll-serve
+	volume:
+	  - .:/site
+	ports:
+	  - '80:4000'
+```
+
+A sample Wordpress setup:
+```
+version: '2'
+
+services:
+
+  wordpress:
+    image: wordpress
+	ports:
+	  - 8080:80
+	environment:
+	  WORDPRESS_DB_PASSWORD: example
+	volumes:
+	  - ./wordpress-data:/var/www/html
+
+  mysql:
+    image: mariadb
+	environment:
+	  MYSQL_ROOT_PASSWORD: example
+	  more_keys: can-be-added-like-this
+	volumes:
+	  - ./mysql-data:/var/lib/mysql		# mysql in mariadb ?!
+```
+
+
+The YAML format quick reference: https://yaml.org/refcard.html
+The compose file version differences: https://docs.docker.com/compose/compose-file/legacy-versions/
+Docker compose release downloads(for Lunux users that need to download manually): https://github.com/docker/compose/releases
+res/s06-compose-slides.pdf
+res/dm-s06-commands.txt
+YAML official website: https://yaml.org/
+YAML vs JSON: https://nodeca.github.io/js-yaml/
+
+
+59 > Compose V2 (released 2022)
+
+Just remove the '-': `$ docker-compose` -> `$ docker compose`
+
+Fully backward compatible, drop-in replacement for V1.
+V1 was in Python, now rewritten in Go.
+Faster, more stable.
+
+
+60 > Basic compose commands
+
+`docker-compose` CLI tool is a separate binary from the `docker` binary
+	it comes bundled on Windows/Mac, on Linux, you can download it separately
+
+It's not designed to be a production grade tool. It's ideal for local development
+
+Example: course-git-repo:compose-sample-2 directory
+`$ docker compose up` -> starts everything with logs in foreground
+	each container's log in different color!!
+
+Ctrl-C to stop it.
+
+`$ docker compose up` -> starts everything, detached in the background, no logs
+`$ docker compose logs` -> same logs
+`$ docker compose down` -> stop & clean up
+
+`docker-compose` talks to Docker API in the background just like the `docker` command.
+
+Many options are similar:
+`docker compose ps`
+`docker compose top`
+
+
+Compose vs. Swarm for production: https://github.com/BretFisher/ama/discussions/146
+	(The selected answer of Bret recommends Swarm)
+
+
+61 > Version dependencies in milti-tier apps
+
+When composing multiple containers like an app and a db, their version dependencies need to be checked.
+	i.e. which version of the app needs which version of the db.
+
+Use following versions in next assignments:
+	drupal:9
+	postgres:14
+
+62 > Correction
+
+There are two compose assignments, first one is in the `compose-assignment-1` directory.
+In the answer video, Bret is mistakenly using the `compose-assignment-2` directory.
+
+
+63 > Compose assignment 1							TODO
+
+Compose file reference: https://docs.docker.com/compose/compose-file/
+Don't use links, it's a legacy feature: https://docs.docker.com/network/links/
+
+64 > Compose assignment 1 Answer
+
+
+65 > Adding image building to compose files
+
+`$ docker compose up` can build images at runtime if mentioned so and if not found in cache => won't build every time.
+
+`$ docker compose build` or `$ docker compose up --build` to rebuild if you change them
+
+
+Example course-git-repo:course-sample-3 directory:
+```
+version: 2
+
+services:
+  proxy:
+    build:								# build custom image
+	  context: .						# in this dir
+	  dockerfile: nginx.Dockerfile		# from this docker file
+	image: nginx-custom					# and name the image this
+	ports:
+	  - '80:80'
+  web:
+    image: httpd
+	volumes:
+	  - ./html:/usr/local/apache2/htdocs
+```
+
+`docker compose down --help` -> for options to auto delete the built images.
+
+Compose names the containers, volumes, and networks with the name of the directory as the project name(can be configured).
+It also does that for the built images. So `image` is optional. This makes it easier to auto remove these images with `down`.
+
+`docker compose down --local` -> deletes those auto-named images
+`docker compose down --all` -> deletes all the images i.e. including the httpd one
+
+
+Compose build doc: https://docs.docker.com/compose/compose-file/build/
+
+
+66 > Correction: using MariaDB rather than PostgreSQL
+
+Sometimes mysql has support issues for arm64 image version(Apple Silicon and Raspberry Pi) and
+	postgres isn't easily supported in newer Drupal versions.
+
+
+MariaDB has better support and recommended for the next assignment. Only following env variables need to be changed:
+```
+MARIADB_ROOT_PASSWORD
+MARIADB_DATABASE
+MARIADB_USER
+MARIADB_PASSWORD
+```
+
+67 > Compose assignment 2								TODO
+68 > Compose assignment 2 answers
+
+
+
+[8] Swarm Intro and Creating a 3-Node Swarm Cluster
+
+
+69 > Swarm mode: built-in orchestration
+
+Not related to Swarm "classic" for pre-1.12 versions.
+Added in 1.12 (summer 2016) via SwarmKit toolkit.
+Enhanced in 1.13 (January 2017) via Stacks and Secrets.
+
+Containers promise to be able to easily deploy the apps on anyone's hardware: virtual, physical, cloud, wherever
+	and it works the same.
+
+It's like we are a platform service, like Heroku or something.
+But without all those platform features, how to we deploy/maintain 100s or 1000s of containers on many servers/nodes?
+
+=> New problems that weren't previously problems for small organizations.
+
+- How do you automate container life cycle?
+	Netflix and all have many people, but how does a team of a couple of people or a solo devs
+	scale them or deal with their entire life cycle? Like deploying/starting/restarting/recreating/deleting/updating etc.
+- How can we scale out/in/up/down?
+- How can we ensure our containers are recreated when they fail?
+- How can we update containers without downtime(blue/green deploy)?
+- How can we control/track where containers get started?
+- How can we create cross-node virtual networks?
+- How can we ensure the containers are only running on the machines that we intend for them to run on?
+- How can we store secrets, keys, passwords and get them to the right container(and only that container)?
+- How can we ?
+
+
+Swarm mode is a server clustering solution brings together different OSes or hosts/nodes into a single manageable unit
+	not enabled by default to not break the older setups.
+
+Some concepts
+
+Manager nodes with local copies of Raft DB to store config and the info needed by them to have the authority in a swarm.
+	Encrypt their traffic(each one has TLS and own cert)
+
+Worker nodes(each with TLS)
+
+Each one of theses would be a VM or PM running some distro of Linux or Windows Server.
+
+Something called "Control Plane" ~-> how orders get sent around the swarm, partaking actions.
+
+Manager nodes issue orders down to the workers. A manager is also a worker with permissions to control the swarm.
+
+
+Our normal `$ docker run` command can just deploy 1 container on the machine the Docker CLI is talking to
+	local or maybe a server we have logged in to. It can't scale out/up. We need new commands to deal with that.
+
+-> `$ docker service` command replaces `$ docker run` in Swarm
+	-> extra features like how many replicas of the containers to run
+	known as tasks
+
+1 service - multiple tasks. Each task will launch a container.
+
+Managers decide where in the swarm to place the replicas.
+	By default, it tries to spread them out. Each node will get a container instance
+
+
+Docker 1.12 Swarm Mounts deep dive
+	part 1: https://www.youtube.com/watch?v=dooPhkXT9yI
+	part 2: https://www.youtube.com/watch?v=_F6PSP-qhdA
+Heart of SwarmKit - topology management: https://speakerdeck.com/aluzzardi/heart-of-the-swarmkit-topology-management
+Heart of SwarmKit - store, topology, and object model: https://www.youtube.com/watch?v=EmePhjGnCXY&themeRefresh=1
+Raft consensus visualization https://thesecretlivesofdata.com/raft/
+res/dm-s07-commands.txt
+res/s07-swarm-intro-slides.pdf
+
+
+70 > Create your first service and scale it
+
+Wherever we are running the docker, we can always create a one-node swarm, for our own testing purpose
+
+`$ docker info` -> "Swarm: inactive" => Swarm is not enabled
+
+`$ docker swarm init` -> now we have a single node swarm
+
+It does:
+	- a lot of PKI and security automation stuff:
+		- creates a root certificate for the swarm to establish trust & sign certificates for all nodes & managers
+		- special certificate is issued for the first manager node
+		- create join-tokens to use on other nodes to join the swarm
+	- enables the swarm API
+	- creates the Raft consensus DB on disk to stores swarm config, root CA, & secrets
+		- encrypted by default(1.13+)
+		- no need for another key/value system to hold orchestration/secrets
+		- replicates logs among the managers via multiple TLS in "control plane"
+
+	- waits for any other nodes before it starts replicating the DB over to them
+
+Raft is a protocol that ensures consistency across multiple nodes and is ideal for using in cloud
+	where we can't guarantee that any one thing will be available for any moment in time.
+
+`$ docker node ls` -> shows just the manager node that we created marked as leader(can be only one among all managers)
+
+Just a quick look at: `$ docker node --help` and `$ docker swarm --help`
+
+For now, look at: `$ docker service --help`
+
+Unlike the single-host `$ docker run`, `$ docker service` is for cluster. We don't much care about individual nodes.
+	We don't probably name them. We treat them like cattle("pet's vs cattle" analogy). They are just number.
+	We just throw requirements at the swarm in the form of services, and it will orchestrate & decide which node etc.
+
+Simple example:
+`$ docker service create alpine ping 8.8.8.8` -> service ID
+`$ docker service ls` -> shows the table with our service with random name(just like individual containers),
+	1(actually running) of 1(you specified) replica is spun up - goal of the orchestrator is to make these numbers match,
+		whatever that takes.
+
+`$ docker service ps <service-name/id>` -> tasks(or containers) of the service
+`$ docker container ls` -> still works
+
+Let's scale it up!
+`$ docker service update <service> --replicas 3`
+Now `service ls` shows 3/3 and `service ps` shows 3 tasks(containers)
+
+There's also `$ docker update` command for normal `docker run` containers
+	to update certain container variables without having to kill and restart them
+	most of them are related to controlling container resource usage
+
+But `$ docker service update --help` has lot more options cause the goal is to replace containers and update changes
+	without taking the entire thing down.
+
+	You could technically take down one at at time to change and do rolling update(blue/green pattern).
+	But the swarm will ensure that the way we update them is in a pattern that ensures consistent availability.
+
+
+Now, what if you kill a container behind the back of the swarm?
+`$ docker container rm -f <a-swarm-node>`
+
+The swarm is gonna identify that and gonna launch a new one within seconds !!
+	`$ docker service ls` will reflect 2/3 then 3/3
+	`$ docker service ps <service>` shows the history
+
+Cool!
+
+`$ docker service rm <service>` -> takes everything down
+
+Deploy services to a swarm (Docker Docs): https://docs.docker.com/engine/swarm/services/
+
+
+71 > CLI change in 2017
+
+`$ docker service create/update` now runs in foreground by default.. `--detach` needs to be used explicitly for background
+
+
+72 > Use "Multipass" to create Docker, Swarm, and K8s VMs
+
+"docker-machine" was used to create VMs with docker pre-installed.
+The project is now archived(https://github.com/docker/machine/releases/tag/v0.16.2).
+	But you can still use it for the course.
+Today, there are better alternatives like https://multipass.run
+Bret's discussion about multipass.run on his live show: https://www.youtube.com/watch?v=0Jipb9fhpIw&t=641s
+
+Use multipass to create VMs for Swarm or K8s clusters.
+Multipass creates full Ubuntu server VM on your Host machine
+	using various virtualization options (hyper-v, VirtualBox(default), hyperkit, etc.).
+	Fast and easy. Their website has a quick walkthrough for each host OS type.
+Then you can install Docker and/or K8s inside them.
+	`$ multipass shell <name>` -> VM's shell
+	`$ multipass mount` -> to connect a host directory in to the VM
+	`$ multipass transfer` -> to copy files in
+
+
+73 > Create a 3-node swarm cluster
+Options:
+	1. play-with-docker.com
+	2. docker-machine + Virtual Box comes with docker for Windows/Mac(can be downloaded for Linux)
+		Just install VirtualBox and
+		`$ docker-machine create node1`
+		`$ docker-machine create node2`
+		`$ docker-machine create node3`
+
+		then ssh using `$ docker-machine ssh node1`
+		or you can: `$ docker-machine env node1`
+		`$ eval(docker-machine env node1)` will reprogram your host's docker CLI
+			to talk to node1's docker host instead of the local one. Check `$ docker info` "Name" to see the host's name
+
+	3. Digital ocean + Docker install (with Bret's referral code for free $10)
+		You can create "droplets"(VMs) - default Ubuntu recommended
+		$10/month is recommended ($5/month will work to be might get slow for later demos)
+		Choose location near to you
+
+	4 Roll your own 3 machines and use get.docker.com to install docker on 'em.
+
+
+Requirement:
+	All 3 machines need solid networking to each other and specific ports open.
+
+Steps:
+node1:
+- `$ docker swarm init --advertise-addr <machine's public IP address>` - node1 becomes the leader manager.
+- copy the swarm join command(for worker not manager) from the output and run that on node2.
+- node1: `$ docker node ls` -> Manager status: node1: "Leader", node2: blank
+- node2 can't use any of the swarm commands as workers aren't really privileged, can't control the swarm.
+- `$ docker node update --role manager node2` -> promotes node2 to manager
+- node1: `$ docker node ls` -> now it's manager status is "reachable"
+- `$ docker swarm join-token manager` -> join-tokens are part of the swarm config, can also change them if compromised.
+- run that on node3 for it to join as a manager.
+- `$ docker node ls`
+
+Now we have a 3-node redundant swarm with 3 managers. Now try this:
+
+- `$ docker service create --replicas 3 alpine ping 8.8.8.8`
+- `$ docker service ls`
+- `$ docker node ps`
+- `$ docker service ps <service>`
+
+
+
+
+Docker Swarm Firewall ports: https://www.bretfisher.com/docker-swarm-firewall-ports/
+SSH config: https://www.digitalocean.com/community/tutorials/how-to-configure-custom-connection-options-for-your-ssh-client
+Windows Hyper-V driver for docker-machine: https://docs.docker.com/desktop/
+Create and update SSH keys to Digital Ocean: https://docs.digitalocean.com/products/droplets/how-to/add-ssh-keys/
+Bret's Digital Ocean referral for $200 credit: https://www.digitalocean.com/?refcode=ee97875d52fa&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=CopyPaste
+
+
+
+[9] Swarm basic features and using them in workflow
+
+74 > Section requirement and version corrections
+
+Bret will use the multi node cluster created in the last section. But if that's too much to build/maintain,
+	we can always use a single node cluster. Nearly everything works the same,
+	except that the scheduler will assign service replicas to different nodes if you have multiple.
+
+Use below versions in docker commands & YAML due to breaking changes in Drupal:
+drupal:9, postgres:14
+
+
+75 > Scaling out in overlay networks
+
+Just `--driver overlay` when creating the network -> Swarm wide bridge network
+	containers across hosts on same bridge network can access each other kind of like they are on aa VLAN.
+This is only for intra-swarm comm.
+Can enable full network encryption using IPSec(AES), off by default for performance.
+Each service can be added to no or 1/more overlay networks depending on your design.
+	Traditional example: DB on back-end n/w, web server on front-end n/w and APIs on both n/w.
+
+Example:
+`$ docker network create --driver overlay mydrupal`
+`$ docker network ls`
+`$ docker service create --name psql --network mydrupal -e POSTGRES_PASSWORD=mypass postgres`
+`$ docker container logs <node id>`
+
+Our DB is now running on node1
+
+`$ docker service create --name drupal --network mydrupal -p 80:80 drupal`
+`$ watch docker service ls` -> Linux's watch command
+`$ docker service ps drupal`
+
+Our website is now running on node2
+
+How do they know how to talk to each other? -> using the service names
+	In drupal's DB setup, you can use the DB service name `psql` as the DB's hostname
+
+
+Cool thing: the website opens on all 3 IP address(of all 3 nodes) in the browser!
+But it's running on only one node and
+`$ docker service inspect` -> it has only 1 IP address
+
+res/s08-swarm-basic-features-slides.pdf
+res/dm-s08-commands.txt
+
+
+76 > Scaling out with routing mesh
+
+Routing mesh is incoming(or ingress network) that distributes packets for a service to it's tasks
+	- Spans all the nodes
+	- Uses IPVS from Linux kernel
+	- Load balances services across their tasks
+	- Two ways it works:
+		1. Container-to-container
+			If back-end DB service were increased to 2/more replicas, the front-end wouldn't actually talk to their
+			IP addresses, but to a VIP(private IP inside the swarm virtual network) that swarm puts in front of all
+			services. It ensures that the load is distributes amongst all the tasks of the service.
+			This is about one service talking to another inside the same virtual network.
+		2. External traffic coming into the swarm can choose to hit any of the nodes.
+			Any of the worker nodes are going to have that public port open and listening for that container's traffic.
+			Then it will re-rout it to the proper container based on it's load balancer.
+
+		=> When you are deploying containers in a swarm, you are not supposed to have to care about what server it's on.
+		Because that might move(failover) and you certainly don't want to change the firewall or DNS settings.
+		The routing mesh solves a lot of those problems by allowing our drupal site on port 80 to be accessible from 
+		any node in the swarm. And in the background, it's routing those packet from that node to the proper container.
+		If it's on a different node, it will rout it over the virtual network. It it's on the same node, it will just
+		re-rout it to the port of that container.
+		All out of the box.
+
+Diagram example 1:
+You create a service "my-web" with 3 replicas on 3 nodes in "my-network" overlay networks.
+In my-network, it's gonna create a VIP mapped to the DNS name(which is same as service name)
+DNS name: "my-web" with VIP: 10.0.9.2 in my-network
+	- node-1: container: mt-web.1 10.0.9.3
+	- node-2: container: mt-web.1 10.0.9.4
+	- node-3: container: mt-web.1 10.0.9.5
+
+Other containers in my-network talk to the service with the DNS name "my-web"
+	and VIP load balances the traffic amongst all the tasks in the services
+
+This isn't actually DNS round robin, slightly a different config(can be enabled that).
+Benefits of VIP over round robin is that many times the DNS cache prevent us from properly distributing the load.
+VIP is what you would have if you bought a dedicated hardware load balancer.
+
+Diagram example 2 - external traffic coming in:
+
+Ingress network:
+One services with 2 replicas on 3 nodes
+	- node-1:
+		- external IP address(given by digital ocean): 192.168.99.100
+			- build-in swarm load balancer on this public IP with published port 8080 (cause `-p`) and "my-web"
+		- task(container): my-web.1 - 10.0.0.1:80
+	- node-2:
+		- external IP address(given by digital ocean): 192.168.99.101
+			- build-in swarm load balancer on this public IP with published port 8080 (cause `-p`) and "my-web"
+		- task(container): my-web.1 - 10.0.0.2:80
+	- node-3:
+		- external IP address(given by digital ocean): 192.168.99.102
+			- build-in swarm load balancer on this public IP with published port 8080 (cause `-p`) and "my-web"
+
+Example in action:
+`$ docker service create --name search --replicas 3 -o 9200:9200 elasticsearch:2`
+`$ docker service ps`
+`$ curl localhost:9200`	-> do repeatedly to see 3 different names - VIP load balancing across the three task
+
+
+Some notes:
+1. This is a stateless load balancer.
+	Like if your app uses session cookies or it expects consistent container to be talking to a consistent client,
+		then you may need to add some other things to solve that problem.
+2. This LB is at OSI layer 3 (TCP) and operates on IP/port layer, not layer 4 (DNS)
+	If you want to run multiple websites on the same port on the same swarm, you will need another piece of the puzzle.
+
+Luckily these are common things, so several options:
+	1. Nginx with HAProxy LB proxy which sits in front of the routing mesh and
+		acts as a stateful LB and can do caching and lots of other things
+	2. Docker Enterprise edition(payed) has UCP or Docker Data Center which comes with an L4 web proxy
+		allows you to throw DNS names in swarm services web config.
+
+
+Swarm mode routing mesh (Docker Docs): https://docs.docker.com/engine/swarm/ingress/
+
+
+
+77 > Assignment: create a multi-service multi-node web app
+
+course-git-repo:swarm-app-1 directory
+
+TODO
+
+78 > Assignment answers
+TODO
+
+
+
+
+
+
+Time completed:
+	4:37 after [5]
+	+ 0:40 after [6]
+	+ 0:38 after [7]
+	Total time completed: 5:55
+
+
+
+
+
+
+TODO: check resources in all the sections till 35!
+
