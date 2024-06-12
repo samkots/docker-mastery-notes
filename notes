@@ -1,6 +1,8 @@
 
 Docker Mastery notes:
 
+Course GitHub repo: https://github.com/BretFisher/udemy-docker-mastery
+
 ---
 
 [n] - section
@@ -12,8 +14,30 @@ n > - chapter
 [1] Quick start
 
 1 > Principle: Build, Ship, and Run
-2 > labs.play-with-docker.com
-	login with DockerHub account
+
+Kubernetes vs Docker: https://www.bretfisher.com/kubernetes-vs-docker/
+OCI overview: https://opencontainers.org/about/overview/
+Read this lecture on GitHub:
+	https://github.com/BretFisher/udemy-docker-mastery/blob/main/intro/what-is-docker/what-is-docker.md
+
+Section commands and links: res/section-commands-and-links.pdf
+
+
+2 > Quick container run
+labs.play-with-docker.com
+	Best way to practice online without installing anything!
+	Login with DockerHub account
+
+Docker Hub: https://hub.docker.com/
+Docker official images: https://docs.docker.com/trusted-content/official-images/
+Read this lecture on GitHub:
+	https://github.com/BretFisher/udemy-docker-mastery/blob/main/intro/quick-container-run/quick-container-run.md
+
+3 > Why Docker?, Why now in 2023?
+
+A brief history of containers: https://www.aquasec.com/blog/a-brief-history-of-containers-from-1970s-chroot-to-docker-2016/
+Read this lecture on GitHub:
+	https://github.com/BretFisher/udemy-docker-mastery/blob/main/intro/why-docker/why-docker.md
 
 
 [2] Course instructions
@@ -23,9 +47,14 @@ n > - chapter
 	clone in user directory(/Users/<user> for Mac) - doesn't matter for linux
 		~-> ensures docker works correctly on Mac/Windows
 
+Docker Mastery slides: res/docker-mastery-slides-3.0.zip
+Docker cheat-shit: res/docker-cheat-sheet-08.09.2016_0.pdf
+Docker Mastery commands: res/docker-mastery-commands-2.0.zip
+
+
 6 > Discord channel: "Cloud Native DevOps"
-7 > Youtube channel: "Bret Fisher Docker and DevOps" - AMA every Tuesday
-8 > The big FAQ
+7 > YouTube channel: "Bret Fisher Docker and DevOps" - AMA every Tuesday
+8 > The big FAQ - TODO
 
 
 [3] The best way to setup docker for your OS
@@ -36,8 +65,93 @@ Docker Desktop - bundle of tools to run docker locally - best way to learn in th
 OCI [Open Container Initiative] - standard for containers, images and registries
 @8:55 - alternatives to Docker Desktop
 
+OCI [Open Container Initiative]: https://opencontainers.org/
 
-TODO: chapters 12, 13, 14
+Docker Desktop alternatives:
+	https://docs.google.com/spreadsheets/d/1ZT8m4gpvh6xhHYIi4Ui19uHcMpymwFXpTAvd3EcgSm4/edit?gid=0#gid=0
+Download Docker Desktop: https://docs.docker.com/desktop/
+
+
+11 > Docker for Windows setup and tips
+
+Recommended: WSL2 over Hyper-V(old way)
+Virtualization needs to be enabled in the BIOS.
+Tweaks:
+Docker Desktop > Settings > Resources
+	> WSL Integration -> all WSL distros are shown here. You can enable Docker Desktop integration with any/all of them.
+
+You can install WSL Ubuntu, create an account in it. Docker commands should work once Docker Desktop is running.
+Windows Terminal is recommended.
+Recommended to clone the course repo inside WSL.
+
+Docker Desktop Windows installation: https://docs.docker.com/desktop/install/windows-install/
+
+
+12 > Docker for Mac setup and tips
+
+Like every other Mac app, you download it as a DMG, and just copy the "Docker.app" in the "Applications" folder.
+Tweaks:
+Docker Desktop > Settings >
+	Resources > Advanced -> you can increase the limits here if Docker is running slow(shrunk when Docker is not running).
+	Experimental Features -> feel free to enable these
+
+Docker Desktop Mac installation: https://docs.docker.com/desktop/install/mac-install/
+
+
+13 > Docker for Linux setup and tips
+
+Docker Desktop still creates a tiny VM even on Linux for consistent experience across all the platforms.
+Official Docker Dock steps are more involved that Windows/Mac
+Tweaks:
+Docker Desktop > Settings > Resources >
+	Advanced -> you can increase the limits here if Docker is running slow(shrunk when Docker is not running).
+	File sharing -> what directory(and all subdirectories) can be bind-mount inside the containers.
+
+
+Docker Desktop Linux installation: https://docs.docker.com/desktop/install/linux-install/
+
+
+14 > Docker for Linux server setup and tips
+
+For running Docker remotely, if for some reason(performance/resources/licensing), you don't want to run it locally.
+This is about *Docker Engine* for Linux servers.
+Docker Engine + CLI != Docker Desktop.
+	We had Docker Engine before we had Docker Desktop. Docker Desktop is a superset.
+	Docker Enhanced is a single binary "dockerd" which runs on any Linux.
+
+Just run the script with curl: get.docker.com
+If you want to run it on a remote server, you don't have to ssh there, just install it there and
+	install the docker-cli client locally(also included in Docker Desktop):
+		- Mac, `$ brew install docker` just installs the client.
+		- Linux: `$ apt install docker-ce-cli`
+		- Windows: `$ choco install docker-cli`
+	tell the client to connect to that server(instead of talking locally by default):
+		- create environment variable: `$ export DOCKER_HOST=ssh://root@<IP-addr>` (it's blank by default => local)
+
+		You can set different value in different terminals to talk to different servers.
+		There's also `$ docker context --help` command which can also do this.
+
+	Remember: whenever Bret types "localhost" in the browser to test something, you will have to replace it with the
+		IP address of the remote server running the Docker Engine.
+
+
+Docker Engine Linux server installation: https://docs.docker.com/engine/install/
+Install Docker CLI locally: https://docs.docker.com/engine/install/binaries/#install-server-and-client-binaries-on-windows
+
+
+15 > VS code 
+
+Can also run on web: https://vscode.dev
+Install, login, and turn on the sync!
+Recommended extensions:
+	Docker - Microsoft
+	Kubernetes - Microsoft
+	Remote Development - Microsoft, installs:
+		Remote Container -> allows running your code inside a container anywhere the docker is running
+		Remote SSH -> treats code on a remote server almost like you are developing on your local system
+		Remote WSL -> allows vscode running natively on Windows to see files inside WSL
+	Live Share - Microsoft -> allows you to live share your code through vscode and edit simultaneously
+
 
 
 [4] Creating and using containers like a boss
@@ -48,6 +162,9 @@ TODO: chapters 12, 13, 14
 
 New CLI style: docker <command> <sub-command> <options>	- better organized
 Old CLI style: docker <command> <options> - still supported
+
+res/s03-containers-slides.pdf
+res/dm-s03-commands.txt
 
 18 >
 `$ docker containers run --publish 80:80 --detach nginx`	- `-p` format is <host:container>
@@ -73,14 +190,27 @@ A container ~ just a process running on host
 `$ docker container top` -> processes "inside" the container
 	this process can be seen running on the host(`$ ps -aux`) with different pid!
 
+Mike Coleman(Docker employee) "Docker for the Virtualization admin" ebook:
+	https://github.com/mikegcoleman/docker101/blob/master/Docker_eBook_Jan_2017.pdf
+Docker internals: https://www.youtube.com/watch?v=sK5i-N34im8&list=PLBmVKD7o3L8v7Kl_XXh3KaJl9Qw2lyuFl
+Docker for Mac - commands for getting into local Docker VM:
+	https://www.bretfisher.com/docker-for-mac-commands-for-getting-into-local-docker-vm/
+Docker for Windows - commands for getting into local Docker VM:
+	https://www.bretfisher.com/getting-a-shell-in-the-docker-for-windows-vm/
+
 21 >
 Images are always OS & arch specific (of course)
+
+22 > Assignment: managing multiple containers
+23 > Assignment answers
+
 
 24 > What's going on inside running containers:
 `$ docker container top <container>` -> processes running inside container
 `$ docker container inspect <container>` -> lot of data, how it was started etc.
 `$ docker container stats <container>...` -> CPU/Mem etc. usage
 
+25 > Use mariadb instead of mysql as mysql has removed the `ps` command
 
 26 > Running a container and also getting a shell inside it, SSH not needed
 `$ docker container run -it` -> run interactively
@@ -102,6 +232,9 @@ You can do that for distro containers!:
 `$ docker container exec -it <container> <cmd>`
 	ex. `$ docker container exec -it ubuntu bash`
 	`$ exit` won't stop the container as `bash` wasn't the root process
+
+Linux package manager basics: https://www.digitalocean.com/community/tutorials/package-management-basics-apt-yum-dnf-pkg
+
 
 27 > Docker Networks
 
@@ -143,10 +276,14 @@ We haven't talked about the IP address yet..
 
 Reminder: there can't be 2/more containers listening on the same port of the host
 
+Docker `--format` option: https://docs.docker.com/config/formatting/
+
+
 28 > Minor correction
 nginx has now removed the ping command
 	for the examples in the next videos, instead of nginx, use nginx:alpine image for the examples
 	or install it with apt-get
+
 
 29 > CLI management of virtual networks
 Commands:
@@ -192,6 +329,7 @@ All externally exposed ports are closed by default. You must manually export via
 
 Later we will see Docker Swarm multi-host networking and how it gets better when we scale up and scale out.
 
+
 30 > DNS
 
 Forget IPs: Static IPs and using IPs for talking to containers is an anti-pattern. Do your best to avoid it.
@@ -216,8 +354,11 @@ The default bridge network doesn't have the DNS server built into it by default.
 
 I think it works on the same hosts as well as across hosts. TODO: check
 
+DNS basics blog & video: https://dyn.com/blog/dns-why-its-important-how-it-works/
+DNS basics comic: https://howdns.works/
 
-31 > Assignment: check virsions of curl on Ubuntu 14.04 and CentOS 7
+
+31 > Assignment: check versions of curl on Ubuntu 14.04 and CentOS 7
 32 > Assignment answer
 Just do:
 	`$ docker container run -it --name ubuntu ubuntu:14.04`
@@ -270,6 +411,8 @@ I did:
 		-> request is randomly redirected to one of the servers
 
 Then cleaned up the containers.
+
+Round-robin DNS: https://en.wikipedia.org/wiki/Round-robin_DNS
 
 
 35 > Answers:
@@ -903,6 +1046,7 @@ MARIADB_PASSWORD
 ```
 
 67 > Compose assignment 2								TODO
+course-git-repo:compose-assignment-2 directory
 68 > Compose assignment 2 answers
 
 
@@ -1270,13 +1414,11 @@ TODO
 Time completed:
 	4:37 after [5]
 	+ 0:40 after [6]
-	+ 0:38 after [7]
-	Total time completed: 5:55
+	+ 0:58 after [7]
+	+ 0:38 after [8]
+	Total time completed: 6:53
 
 
 
 
-
-
-TODO: check resources in all the sections till 35!
 
