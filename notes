@@ -720,7 +720,7 @@ Can't use in Dockerfile, must be in `$ docker container run` as bind mounts are 
 `$ docker run ... -v /Users/sam/stuff:/path/in/container` (Linux/Mac)
 `$ docker run ... -v //c/Users/sam/stuff:/path/in/container` (Windows)
 
-	Note: It's considered as bind mount instead of a named volume if it starts with a '/'
+	Note: It's considered as bind mount instead of a named volume if it includes a '/'
 
 Example: from the previous assignment: course-git-repo:dockerfile-sample-2/
 
@@ -973,6 +973,8 @@ Compose vs. Swarm for production: https://github.com/BretFisher/ama/discussions/
 
 61 > Version dependencies in milti-tier apps
 
+course-git-repo:compose-assignment-1 directory
+
 When composing multiple containers like an app and a db, their version dependencies need to be checked.
 	i.e. which version of the app needs which version of the db.
 
@@ -986,10 +988,20 @@ There are two compose assignments, first one is in the `compose-assignment-1` di
 In the answer video, Bret is mistakenly using the `compose-assignment-2` directory.
 
 
-63 > Compose assignment 1							TODO
+63 > Compose assignment 1
+
+Build a basic Drupal content management site with postgres (2 services).
+Expose Drupal on 8080
+Recommended version: 2
+For postgres, set a password: POSTGRES_PASSWORD
+Work through the Drupal setup(asks for DB server default localhost won't work)
+	remember: service name is DNS name
+Extra credit: Drupal docker doc: it uses volumes to store the uploaded data. Experiment with that.
+
 
 Compose file reference: https://docs.docker.com/compose/compose-file/
 Don't use links, it's a legacy feature: https://docs.docker.com/network/links/
+
 
 64 > Compose assignment 1 Answer
 
@@ -1045,9 +1057,24 @@ MARIADB_USER
 MARIADB_PASSWORD
 ```
 
-67 > Compose assignment 2								TODO
+67 > Compose assignment 2
 course-git-repo:compose-assignment-2 directory
+
+Continuing assignment 63, instead of using the official one directly, build custom drupal image with a custom template
+
 68 > Compose assignment 2 answers
+
+Some cool tips here:
+	Clean up the cache after apt-get install -> reduces images size
+	Example:
+		RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+	If cloning a git repo in an image, just clone the single branch required
+	Example:
+		RUN git clone --branch <branch> --single-branch --depth 1 <repo> \
+		&& chown -R www-data:www-data bootstrap
+			permission change needed as docker runs are root but apache expects "www" permissions
+
 
 
 
@@ -1289,8 +1316,11 @@ Just `--driver overlay` when creating the network -> Swarm wide bridge network
 	containers across hosts on same bridge network can access each other kind of like they are on aa VLAN.
 This is only for intra-swarm comm.
 Can enable full network encryption using IPSec(AES), off by default for performance.
-Each service can be added to no or 1/more overlay networks depending on your design.
+Each service can be added to 0/more overlay networks depending on your design.
 	Traditional example: DB on back-end n/w, web server on front-end n/w and APIs on both n/w.
+
+The only kind of network we can use in a swarm, because it allows us to span across nodes
+	as if they are all on the local network.
 
 Example:
 `$ docker network create --driver overlay mydrupal`
@@ -1401,12 +1431,38 @@ Swarm mode routing mesh (Docker Docs): https://docs.docker.com/engine/swarm/ingr
 
 course-git-repo:swarm-app-1 directory
 
-TODO
-
 78 > Assignment answers
-TODO
+
+The `$ docker container create` `-v` options doesn't work with the `$ docker service create` due to it's limitations.
+New improved format: `--mount type=volume,source=db-data,target=/var/lib/postgresql/data`
 
 
+
+79 > Swarm stacks and production grade compose
+
+Docker 1.13 added stacks - basically compose files for production production swarm.
+	Includes services, networks and volumes, the stack creates/manages everything.
+	We can specify external things(to use the already existing ones).
+	New `deploy:` key to mention swarm specific stuff.
+
+You can do `$ docker stack deploy`.
+
+It can't do `build:` cause ideally, building shouldn't happen on production swarm. Your CI system should do it.
+Compose ignores `deploy:` and Swarm ignores `build:`.
+	=> you don't have to change the file. Same file can work for both the development and production deployment sites.
+
+You don't need the `docker-compose` CLI binary(the non-production sys-admin/dev helper tool).
+The swarm i.e. the Docker engine directly deal with the files.
+
+So, the stack includes multiple services, overlay networks and volumes. (It can also control secrets).
+	Stack controls all those things, puts it's name properly on the objects to distinguish them. + labels & metadata.
+
+A stack is only for one swarm. It can't do many swarms.
+
+
+
+
+Swarm vs Compose: https://github.com/BretFisher/ama/discussions/146
 
 
 
