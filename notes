@@ -763,7 +763,7 @@ Where Postgres "old" & "new" versions are mentioned, you can use postgres:15.1 a
 Container best practice:
 	Don't update the applications in the container, but rather replace the container with the new version.
 
-Launch postgress 9.6.1 container with a named volume, refer Docker Hub for the path.
+Launch postgres 9.6.1 container with a named volume, refer Docker Hub for the path.
 Container displays many initial logs.
 Stop the container.
 Launch a new container with postgres 9.6.2 with the same volume.
@@ -1452,17 +1452,345 @@ Compose ignores `deploy:` and Swarm ignores `build:`.
 	=> you don't have to change the file. Same file can work for both the development and production deployment sites.
 
 You don't need the `docker-compose` CLI binary(the non-production sys-admin/dev helper tool).
-The swarm i.e. the Docker engine directly deal with the files.
+The swarm i.e. the Docker engine directly deal with the files. Stack file version 3/3.1/more is must
 
 So, the stack includes multiple services, overlay networks and volumes. (It can also control secrets).
 	Stack controls all those things, puts it's name properly on the objects to distinguish them. + labels & metadata.
 
 A stack is only for one swarm. It can't do many swarms.
 
+Last assignment could be a stack file!
+course-git-repo:swarm-stack-1/example-voting-app-stack.yml quick go-through:
+There's the new `deploy:` key:
+```
+version: "3.9"
+services:
+  ...
+  redis:
+    ...
+    deploy:
+      replicas: 1
+      update_config:			# What happens when you update stack which updates the service, how you want to roll it out
+        parallelism: 2			# 2 at a time(could be 1 at at time or all at at time)
+        delay: 10s				# delay between them
+      restart_policy:
+        condition: on-failure	# auto restart the container if it fails
+  ...
+  db:
+    ...
+    deploy:
+      placement:
+        constraints: [node.role == manager]		# put it only on a manager node
+  ...
+  worker:
+    ...
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels: [APP=VOTING]						# can assign labels to anything, even nodes
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3							# if restart fails, it won't try more than 3 times
+        window: 120s
+      placement:
+        constraints: [node.role == manager]
+```
 
+Deploying the stack:
+
+`$ docker stack deploy -c swarm-stack-1/example-voting-app-stack.yml voteapp`
+
+`$ docker stack ls`
+`$ docker stack services <stack-name>` -> shows services with their replicas
+`$ docker stack ps <stack-name>` -> shows tasks with task IDs(not container IDs, they are different IDs)
+
+The stack file has a visualizer services listening on 8080. Shows all services running on nodes in UI in browser!
+
+Updating the services using commands is kind of an anti-pattern as the changes won't be applied next time.
+Instead, always change the file(the source of truth) and do `$ docker stack deploy <same-stack-name>`.
+	It automatically recognizes the existing stack and just updates it.
 
 
 Swarm vs Compose: https://github.com/BretFisher/ama/discussions/146
+
+
+80 > Secrets storage for swarm - protecting your environment variables
+
+Easiest secure solution for storing secrets in swarm.
+Encrypted on disk, encrypted in transit
+Supports generic string/binary content up to 500Kb.
+Doesn't require apps to be rewritten(like, to talk to some web service etc.).
+
+As of 1.13.0 the Raft DB is encrypted by default. Only stored on manager node disks. They are the only ones having the keys.
+Default manager & worker "control plane" is TLS + Mutual Auth through which the secrets are brought down to the container.
+
+We store secrets in swarm and assign them to services to tell it who is allowed to access them.
+
+To apps, they look like files, but they are in memory only(using ramfs file system) not on disks:
+One `/run/secrets/<secret_name>` or `/run/secrets/<secret_alias>` file per secret.
+File name is the key and the contents are the value. Can assign aliases(multiple names) to same secret.
+
+The keys depend on the swarm's encryption feature.
+If you don't have swarm enabled and are using docker-compose, which should never be used in production,
+	it "fakes" the security by storing the secrets in plain text files.
+Keys are a swarm-only feature.
+
+
+81 > Using secrets in swarm services
+
+course-git-repo:secrets-sample-1/ contains a file containing a secret.
+Two ways:
+1. File
+	`$ docker secret create <secret-name> <file>`
+2. Command-line
+	`$ echo "<password>" | docker secret create <secret-name> -`
+
+Don't store the secrets in the files on the remote hosts(use local docker CLI to do this).
+And beware of shell history in option 2!
+
+Now only the containers in the services to which you assign these keys can access them.
+
+Example:
+`$ docker secret create psql_user <file>`
+`$ echo "<password>" | docker secret create psql_pass -`
+
+The app doesn't have any way to know how to access the secrets. So we usually pass environment variables with secret names.
+Postgres has standard ones:
+
+`$ docker service create --name psql --secret psql_user --secret psql_pass \
+	-e POSTGRES_USER_FILE=/run/secrets/psql_user \
+	-e POSTGRES_PASSWORD_FILE=/run/secrets/psql_pass \
+	postgres`
+
+If this wouldn't work, if the DB wouldn't get the password, the container would keep failing and swarm would keep
+	creating new containers.
+
+We could do `$ docker service update --secret-rm` (there's also `--secret-add`), but that would redeploy the container.
+	Because secrets are part of the immutable design of services. If anything in the container has to change for the
+	service, the service won't go in and change it inside the container. It will actually stop the container and re-deploy
+	a new one.
+
+	So we will need some other plan to update the DB passwords(discussed later).
+
+
+`$ docker secret ls`
+`$ docker secret rm ...` to remove them.
+
+Docker docs: https://docs.docker.com/engine/swarm/secrets/
+
+
+82 > Using secrets with swarm stacks
+
+course-git-repo:secrets-sample-2/ contains a compose file and two files containing secrets.
+
+This needs the compose file version to be at least 3.1.
+```
+version: "3.9"
+
+services:
+  psql:
+    image: postgres
+    secrets:
+      - psql_user
+      - psql_password
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/psql_password
+      POSTGRES_USER_FILE: /run/secrets/psql_user
+
+secrets:
+  psql_user:
+    file: ./psql_user.txt
+  psql_password:
+    file: ./psql_password.txt
+```
+
+OR you can also have the secrets pre-created and instead of `file:`, you can mention "external" to use existing ones.
+
+Above is the short-form, there's also a long-form that allows us to define permissions and users that are allowed
+	to access the keys using the standard Linux mode and user ID syntaxes.
+
+`$ docker stack rm <stack>` also automatically removes the secrets.
+
+Secrets in compose file: https://docs.docker.com/compose/compose-file/09-secrets/
+
+
+83 > Assignment
+
+Use compose-assignment-2.
+Use the official image drupal:8.2 and remove `build:`.
+Create secret with CLI and add `external:` to use them.
+You'll need to pass environment variable POSTGRES_PASSWORD_FILE.
+
+84 > Assignment answer
+
+
+
+[10] Swarm App Lifecycle
+
+85 > Secrets with local docker-compose
+
+Secrets need Swarm. But docker allows the file based secrets to work with the non-production dev tool docker-compose in
+a non-secure way, so that you can use the same compose(stack) file for development.
+It just bind mounts the actual file from your hard drive into the container.
+
+course-git-repo:secrets-sample-2/
+
+Doesn't work with external secrets. There, you will have to have separate compose file for development
+
+
+res/dm-s09-commands.txt
+res/s09-swarm-app-lifecycle-slides.pdf
+
+
+86 > Full app lifecycle: dev, build, and deploy with a single compose design
+
+Sometimes, you might wanna use multiple compose files(don't have to).
+
+course-git-repo:swarm-stack-3/ example: we have:
+	- Dockerfile
+	- docker-compose.yml			-> base compose file, sets the defaults that are common across all environments
+	- docker-compose.override.yml	-> (standard name) automatically brought in when `$ docker compose up`
+	- docker-compose.prod.yml		-> non-standard name `-f` is required
+	- docker-compose.test.yml		-> again, `-f` is required, uses fake password, no volumes(it's just for test cases)
+
+The docker-compose.override.yml	is for local development. Using standard name as during development, the hand typed
+commands should be as small as possible. Uses file based secrets (cause it's local remember? Swarm might not be there).
+
+The docker-compose.test.yml is just for CI environment for running the test cases. Has `build: .` an image on every commit.
+Publishes ports used for testing purposes. It uses fake password. But don't need to define any other volumes.
+Instead, bind mounts a sample-db volume(which may come from a git repo or FTP download)
+	=> same data for every CI test suite run
+
+The docker-compose.prod.yml contains all the normal production concerns: data volumes etc.
+Uses external secrets, cause we're going to have put the secrets in already via CLI
+We won't have the docker-compose CLI on the production server, instead we will you a `$ docker compose config` command.
+
+We do:
+	- for dev: `$ docker compose up` -> automatically takes docker-compose.yml + docker-compose.override.yml combined
+	- for CI: `$ docker compose up -f docker-compose.yml -f docker-compose.test.yml up` -> base first
+	- for prod: `$ docker compose up -f docker-compose.yml -f docker-compose.prod.yml config > output.yml`
+		-> combines both, we do this somewhere in our CI solution and then we use the output.yml to create/update our stack.
+
+There's new compose `extents:` option to override files. Not released as of the course video recording.
+
+
+Using multiple compose files: https://docs.docker.com/compose/multiple-compose-files/extends/#multiple-compose-files
+Using compose files in production (Docker docs): https://docs.docker.com/compose/production/
+
+
+87 > Service updates: changing things in flight
+
+Rolling replacement for tasks/containers in services is provided.
+Limits downtime. Though you need to test early & test often.
+Unless you are updating a label or some other metadata, it will mostly replace the containers.
+Creation options usually change, adding "-add" or "-rm" to them.
+Includes rollback and healthcheck options. Change if their default values aren't ideal for you.
+Now `$ docker service scale web=4` & `$ docker service rollback web` are separate commands instead of options.
+Remember: stack deploy to existing one(with an edited compose file) is an update.
+
+Examples:
+1. Change the image of a service:
+`$ docker service update --image myapp:1.2.1 <service>` -> every time you update your app and build a new image
+
+2. Multiple in one: add an environment variable and remove a published port:
+`$ ... update --env-add NODE_ENV=production --publish-rm 8080 ...`
+
+3. Change number of replicas in two services:
+`$ docker service scale web=8 api=6` -> multiple in one is the advantage over the update's option
+
+4. Change published port: you have to remove and add:
+`$ ... update --publish-rm 8080 --publish-add 9090:80 ...`
+
+Tip: If you change a lot of things around, if you have a lot of containers in the swarm, you may find that they aren't
+really evened out. Some nodes may have a lot of containers while others have less. Swarm won't auto balance
+You can force an update even without changing anything in the service. Then it will reissue tasks and will pick the least
+used nodes -- a form of rebalancing.
+
+`$ docker service update --force <service>`
+
+It will use the scheduler's default of looking for nodes with the leasts number of containers/resources used.
+
+
+Service update commands Docker docs: https://docs.docker.com/reference/cli/docker/service/update/
+
+
+88 > Healthcheck in docker files
+
+New in 1.12. Supports docker file, compose file, docker run & swarm services.
+Recommended in production.
+Docker engine will `exec` that command inside container with simple 0 or 1 return.
+Only 3 states:
+	starting -> first 30 seconds, hasn't run the healthcheck command yet
+	healthy -> if returns 0, then the command is run every 30 seconds
+	unhealthy -> if it ever returns 1
+
+Much better option than "binary still running?" !
+Not a replacement for 3rd party monitoring solutions. It won't give you graphs or status over time etc. stuff.
+Not super advanced but a basic level of health check. Example, for nginx it might check localhost of the root index file.
+	If it returns 200/300, then it's healthy, but 400/500 etc. then it's unhealthy.
+
+Where do we see it?
+	`$ docker container ls`
+	`$ docker container inspect` -> history of last 5 checks
+
+`docker run` doesn't automatically take any action on unhealthy containers.
+But swarm services replace those containers. Updates also consider the healthcheck as a part of the readyness.
+
+Example: adding a healthcheck in a container whose image doesn't have it.
+```
+$ docker run \
+	--health-cmd="curl -f localhost:9200/_cluster/health || false" \
+	--health-interval=5s \
+	--health-retries=3 \			# retries before considering it unhealthy
+	--health-timeout=2s \
+	--health-start-period=15s \		# additional to first 30 seconds for slow starting apps
+	elasticsearch:2
+```
+Exit code must be 0 or 1(not non-zero), hence the `false` at the end for commands that return non-zero.
+
+Dockerfile health checks:
+
+```
+HEALTHCHECK -timeout=3s -interval=30s -retries=3 \			# options come before the CMD
+	CMD curl -f http://localhost/ || exit 1					# `exit 1` works same as `false`.
+```
+
+Different apps support different health check tools:
+- PHP has localhost/ping that can be curled (check good PHP defaults in the resources).
+- postgres has abuilt-in tool: `$ pg_isready -U postgres`
+
+Compose file health checks:
+
+```
+services:
+  web:
+    ...
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 1m			# requires compose version 3.4/above
+```
+
+The default 30 seconds + the start-period provided will be seen added in `$ docker service create`.
+It will be in "starting" for that period and then go in "running" to ensure the container health.
+
+
+Resources:
+PHP Laravel good defaults with docker: https://github.com/BretFisher/php-docker-good-defaults
+Dockerfiles healthcheck Docker docs: https://docs.docker.com/reference/dockerfile/#healthcheck
+Compose files healthcheck Docker docs: https://docs.docker.com/compose/compose-file/#healthcheck
+
+
+89 > Swarm mastery course
+Checkout out the last lecture of this course for it.
+
+
+
+[11]
+
 
 
 
@@ -1472,9 +1800,13 @@ Time completed:
 	+ 0:40 after [6]
 	+ 0:58 after [7]
 	+ 0:38 after [8]
-	Total time completed: 6:53
+	+ 1:10 after [9]
+	+ 0:37 after [10]
+	Total time completed: 8:40
 
 
+Cool stuff:
+`$ imgcat` displays images in terminal!
 
 
 
