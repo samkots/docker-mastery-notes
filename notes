@@ -1960,14 +1960,145 @@ Larger list here: https://github.com/veggiemonk/awesome-docker#hosting-images-re
 
 96 > Bret's DockerCon 2017 talk on Docker and Swarm in production
 
-Still relevant today.
+TODO
+
+"Still relevant today".
 https://www.youtube.com/watch?v=V4f_sHTzvCI
-	TODO: There's a newer version?
+	There's a newer version? 2018?
 
 res/road-to-production.pdf
 
+97 > The future of swarm
+
+K8s overshadowing swarm?
+But swarm is still getting updates?
+Discussion: https://www.youtube.com/watch?v=L5N43aQQArw&t=223s
+
+98 > Swarm Raft quorum and recovery
+
+YouTube: "Everything You Thought You Already Knew About Orchestration": https://www.youtube.com/watch?v=Qsv-q8WbIZY
 
 
+
+[12] The What and Why of Kubernetes
+
+99 > Intro to Kubernetes
+Nothing mych in this chapter.
+
+res/slides-the-what-and-why+of-kubernetes.pdf
+
+
+100 > What is Kubernetes
+
+What's an container orchestrator?
+Takes your containers, that you ask it to run and a series of nodes
+	and decides how to run those containers across those nodes.
+	It makes many servers act like one.
+
+K8s was released in 2015 by Google and is now maintained by open source community including Google.
+
+Kubernetes essentially is a set of APIs that run on apps in containers to manage a set of servers
+and execution your containers on docker by default. It can run other container runtimes that aren't docker like containerd.
+It provides you a set of API/CLI to manage containers across servers.
+
+Tons of options to get it:
+	1. Cloud vendors - provide kubernetes as a service
+	2. Many vendors make a "distribution" of it.. kind of like Linux distros.
+
+Resources:
+History of kubernetes: https://en.wikipedia.org/wiki/Kubernetes
+Kubernetes home page: https://kubernetes.io/
+
+
+
+101 > Why Kubernetes
+
+Chapter 69 "Swarm mode" for why we need orchestration.
+Important to understand whether you need orchestration or not and what benefits of it.
+
+Some people still use single node and features of their platform, like elastic load balancer etc.
+And they have such a refined system that they don't see a lot of benefits in completely changing all that to orchestration.
+But orchestration is really the way the industry seems to be going.
+
+Formula to decide whether orchestration is needed: Servers + change rate = benefits of orchestration.
+	Number of servers needed for a particular environment and the change rate of the app or the environment itself.
+		Multiplication of those two = benefits of orchestration.
+
+	"Orchestration is designed to automate change and monitor the state of things and
+		ensure everything is in the state you expect it to be in."
+
+	"If you are changing your app once a month or less, then the orchestration effort may be unnecessary,
+		especially if you are a solo developer or just a very small team."
+		That's where things like Elastic Bean Stalks or Heroku app deployment platforms shine as alternatives
+			to doing your own orchestration.
+
+And how to decide which one you want?
+There are 4-5 major platforms including the clouds:
+Top 2: Swarm & Kubernetes, then there are cloud platforms like AWS ECS
+	and traditional ones like Cloud Foundry or Mesos and Marathon.
+
+But if you are concerned about running the containers on-prem and in cloud or multi-cloud, you may not want to go with
+	the cloud specific offerings like ECS. Cause those were around before K8s was. That's Amazons kind of legacy solution.
+	And there's vendor lock-in.
+	In that case, Swarm and Kubernetes ate the two options.
+
+If Kubernetes is decided, then which distribution?
+Do you want a cloud managed or a self-managed solution?
+Self-managed solutions are vendor's product which you will install on on the servers,
+	like Docker Enterprise, Rancher, OpenShift, Canonical, VMWare PKS.
+	Use the compliant distributions in the link below so you can change from one vendor to another.
+
+Another option: use raw GitHub upstream version of kubernetes.
+But you probably don't need it.  Kubernetes needs a lot of things added to really make it easy to use OOTB.
+So you will probably want the extra vendor solutions like custom auth, custom web administration, custom networking etc.
+But it's great for learning and recommended to start with as the way to learn K8s.
+
+Resources:
+List of certified kubernetes distributions: https://kubernetes.io/partners/#conformance
+
+
+102 > Kubernetes vs Swarm
+
+Swarm is easy, but doesn't solve all the problems.
+Kubernetes has much more functionality, flexibility, & customizations and can solve more problems in more ways
+	and generally has wider adaption and support.
+
+Swarm advantages:
+Single vendor container platform - Docker & swarm are both from the Docker.
+Easy orchestration to deploy/manage yourself.
+Kind of has 20% of Kubernetes features that solve 80% of the problems.
+Runs anywhere docker does: local, cloud, datacenter, ARM, Windows, 32-bit - longest & widely supported orchestrator.
+Secure by default.
+Easier to troubleshoot.
+
+Basically, good for starting out with 2-3 people, unless you know you absolutely need kubernetes.
+
+Kubernetes advantages:
+Widest cloud and vendor support - kind of a zeitgeist.
+	Infra vendors too have support for it including VMWare, Redhat.
+Widest adaption.
+Widest set of supported use cases.
+"No one ever got fired for buying IBM machines" - basically, if you couldn't make a decision,
+	you would just go the safe way(with IBM) and you would never get fired for that because it was trusted at the time.
+	- Picking a solution isn't 100% rational
+	- "Trendy" will benefit your career
+	- CIO/CTO/higher management checkbox even if you don't have any technical requirement
+
+
+[14] Kubernetes architecture and install
+
+103 > Section intro
+Nothing much.
+
+Resources:
+res/slides-kubernetes-architecture-and-install.pdf
+res/section-14-commands-and-links.pdf
+
+
+104 > Kubernetes architecture technology
+
+Resources:
+Kubernetes components: https://kubernetes.io/docs/concepts/overview/components/#master-components
 
 
 
@@ -1981,7 +2112,9 @@ Time completed:
 	+ 1:10 after [9]
 	+ 0:37 after [10]
 	+ 0:29 after [11]
-	Total time completed: 9:09
+	46 mins skipped for later [12]
+	+ 0:22 after [13]
+	Total time completed: 9:31
 
 
 Cool stuff:
