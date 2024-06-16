@@ -533,7 +533,7 @@ Docker docs on images & containers: https://docs.docker.com/storage/storagedrive
 Images don't technically have names. `$ docker image ls` output has not name column. It has repository, tag, & image ID
 Besides the image ID(which we don't remember), we have to refer to them with three different pieces of information.
 
-Repository: <username/org>/<repository> (only <repository> for official images as they live at registery's root namespace)
+Repository: <username/org>/<repository> (only <repository> for official images as they live at registry's root namespace)
 	example:
 		bretfisher/nodemongoapp
 		mysql						<- official
@@ -1789,7 +1789,185 @@ Checkout out the last lecture of this course for it.
 
 
 
-[11]
+[11] Container Registries: Image Storage and Distribution
+
+90 > Docker Hub: digging deeper
+
+Image registries is a required part of the container echosystem. A place to store the images off your dev workstation is
+required. It can be on the internet or private.
+
+Docker Hub is an image registry + lightweight building(which is extra, not part of a registry).
+
+Docker Hub > Create > Create Automated Build
+	-> choose GitHub or BitBucket -> choose repository -> it automatically builds the image on every commit
+	Docker Hub is notified when some event happens
+	Docker Hub rep > build settings to customize(choose branch etc.) and
+	Repo links -> if you are building on Docker Hub and using the `FROM` statement to pull from some other image,
+		then you want to setup repo link so any time that software changes, your image get's auto rebuilt.
+	Build trigger -> gives you an endpoint. POST on it will trigger a build.
+
+
+Web hooks are for Docker Hub to notify something else.
+
+Docker Hub: https://hub.docker.com/
+res/dm-s10-commands.txt
+res/s10-container-registries-slides.pdf
+
+
+91 > Understanding docker registry
+
+Running private registry:
+It's a part of the docker/distribution code repo on GitHub.
+This is V2(rewritten in Go). There's also a legacy old version.
+It's bare-bones, no UI. It does support certificate and basic auth(no RBAC) OOTB, but not enabled by default.
+Without any tools on top of it, it's useful in small teams.
+At it's core, it's just a web API and a storage system.
+Comes with a lot of storage drivers, allows you to put the back-end store on: local/S3/Azure/Alibaba/GCP/OpenStack Swift
+
+You can also use the `--registry-mirror` option to mirror the Docker Hub. It caches the images near your metal.
+So, download the images from the Docker Hub once and cache them for all machines to pull.
+
+
+Use registry as a "mirror" of Docker Hub: https://docs.docker.com/docker-hub/mirror/
+Registry docs: https://distribution.github.io/distribution/
+Registry garbage collection: https://distribution.github.io/distribution/about/garbage-collection/
+
+
+92 > Run a private docker registry
+
+HTTP server listening on port 5000 by default.
+
+Docker doesn't talk to registries without TLS, except for localhost(127.0.0.0/8).
+	For remote self-signed TLS, enable "insecure-registry" in engine.
+
+For the demo, we will:
+	1. Re-tag an existing image and push to our new registry.
+	2. Remove the image from local cache and pull from the new registry.
+	3. Recreate the registry using bind-mount and see hot it stores the data.
+
+
+Let's run the registry:
+`$ docker container run -d -p 5000:5000 --name registry registry`
+
+The account-name/repository-name format is for Docker Hub. For any other registry, we need to label it with the host.
+
+`$ docker pull hello-world`				- pulling our sample image
+`$ docker container run hello-world`	- just prints some text to validate that the container ran
+
+To push it to a local registry, we need to give it another tag.
+
+`$ docker tag hello-world 127.0.0.1:5000/hello-world`
+	- This is equivalent of making our own official image at the root of our local registry.
+
+`$ docker push 127.0.0.1:5000/hello-world` - it will see the IP/port and push to the local registry.
+
+Let's remove the images from the local cache
+`$ docker image remove hello-world`
+`$ docker image remove 127.0.0.1:5000/hello-world`
+
+`$ docker image ls` -> we don't have it anymore.
+
+`$ docker image pull 127.0.0.1:5000/hello-world` -> pulls from the local registry.
+
+
+You should actually use a volume to store the data. Let's do that.
+
+Removing the first one:
+`$ docker container kill registry`
+`$ docker container rm registry`
+
+And create again:
+`$ docker container run -d -p 5000:5000 --name registry -v $(pwd)/registry-data:/var/lib/registry registry`
+`$ ls registry-data` -> empty.
+
+This is technically a new registry, pushing the hello-world image will push to it.
+`$ docker push 127.0.0.1:5000/hello-world` - pushes to the new local registry.
+`$ ls registry-data` -> not empty.
+
+
+93 > Assignment: secure docker registry with TLS and auth
+
+TODO
+
+The default registry is bare-bones and anyone can pull/push. You need TLS to use it over HTTPS and the add some basic auth.
+
+"These aren't hard to learn, but do require some commands. You can learn the basics by creating a self-signed cert
+for HTTPS, and then enabling `htpasswd` auth to add users."
+
+For this assignment, use play-with-docker.
+Do Part 2 & 3 of "Docker Registry for Linux": https://training.play-with-docker.com/linux-registry-part2/
+	You can use their text to do the assignment on your local machine, or see their part 1 to run in on their infra
+		using their web based interface to a real docker engine and learn how the "PWD" works:
+		https://training.play-with-docker.com/linux-registry-part1/
+
+For extra credit lags, look through their growing list: https://training.play-with-docker.com/
+
+
+94 > Using docker registry with swarm
+
+Works the same way as the localhost. The routing mesh allows all the nodes to talk to the registry as if it's local.
+Don't even have to enable "insecure-registry".
+And you need to remember to use a volume to persist the images.
+
+Demo on play-with-docker using 5-manager-node swarm:
+`$ docker service create --name registry -p 5000:5000 registry`
+`$ docker service ps registry` -> running
+
+Play-with-docker gives a URL to published ports.
+On browser, You can go to: <URL>/v2/_catalog -> empty JSON array: `{"repositories":[]}` (this also work on local registries)
+
+`$ docker pull hello-world`
+`$ docker tag hello-world 127.0.0.1:5000/hello-world`
+`$ docker push 127.0.0.1:5000/hello-world`
+
+Browser : <URL>/v2/_catalog -> `{"repositories":["hello-world"]}`
+
+Do the same thing with nginx:
+
+`$ docker pull nginx`
+`$ docker tag nginx 127.0.0.1:5000/nginx`
+`$ docker push 127.0.0.1:5000/nginx`
+
+Browser : <URL>/v2/_catalog -> `{"repositories":["hello-world", "nginx"]}`
+
+`$ docker service create --name nginx -p 80:80 --replicas 5 --detach=false 127.0.0.1:5000/nginx`
+
+All the nodes from the swarm must be able to pull their images from some central registry. They can't share with each other.
+Our example works because our registry is running as a service here and all nodes know how to access 127.0.0.1
+and the routing mesh steers them to the correct container.
+
+If you don't have to run your own registry, you can just use one of the hosted ones on the internet.
+They are redundant, have monitoring, have proper storage management and mostly free for open source or reasonably priced.
+Examples: AWS, Quay, Docker Hub. Try them first and use your own registry if you have some offline or security requirements.
+
+
+95 > Third party image registries
+
+Apart from Docker Hub, Docker Enterprise Edition DTR(Docker Trusted Registry) and Docker Registry, there are many.
+
+Quay.io is popular.
+Plus, all 3 clouds have their own services.
+Plus, self hosted options:
+	Docker EE - https://www.docker.com/#/container_management
+	Quay Enterprise - https://quay.io/plans/?tab=enterprise
+	GitLab Container Registry - https://about.gitlab.com/blog/2016/05/23/gitlab-container-registry/
+
+Larger list here: https://github.com/veggiemonk/awesome-docker#hosting-images-registries
+
+
+
+[12] Docker In Production
+
+96 > Bret's DockerCon 2017 talk on Docker and Swarm in production
+
+Still relevant today.
+https://www.youtube.com/watch?v=V4f_sHTzvCI
+	TODO: There's a newer version?
+
+res/road-to-production.pdf
+
+
+
 
 
 
@@ -1802,7 +1980,8 @@ Time completed:
 	+ 0:38 after [8]
 	+ 1:10 after [9]
 	+ 0:37 after [10]
-	Total time completed: 8:40
+	+ 0:29 after [11]
+	Total time completed: 9:09
 
 
 Cool stuff:
