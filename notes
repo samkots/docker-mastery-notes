@@ -2046,7 +2046,7 @@ If Kubernetes is decided, then which distribution?
 Do you want a cloud managed or a self-managed solution?
 Self-managed solutions are vendor's product which you will install on on the servers,
 	like Docker Enterprise, Rancher, OpenShift, Canonical, VMWare PKS.
-	Use the compliant distributions in the link below so you can change from one vendor to another.
+	Use the certified distributions in the link below so you can change from one vendor to another.
 
 Another option: use raw GitHub upstream version of kubernetes.
 But you probably don't need it.  Kubernetes needs a lot of things added to really make it easy to use OOTB.
@@ -2097,24 +2097,238 @@ res/section-14-commands-and-links.pdf
 
 104 > Kubernetes architecture technology
 
+Terms:
+Kubernetes or K8s: the whole orchestration system.
+Kubectl "cube control": CLI to configure k8s.
+Node: Single server in kubernetes cluster. Workers are generally called nodes.
+Kubelet: container that will run a small, little agent on each node to allow that node to talk back to k8s master.
+	Since Swarm was builtin to Docker, it didn't need a separate agent. It was all built into the docker engine.
+Control plane[aka master]: set of containers that manage the cluster. They run individual thing taking the Unix
+	principle of "do one thing and do it well". Includes: API server, scheduler, DB back-end(etcd), controller manager, etc.
+	Just like Swarm, odd number of masters are needed. It uses the same Raft protocol.
+
+	In Swarm, "Control plane" was the protocol that over the network that were allowing master and workers to talk securely.
+	But here, the set of master nodes is called the control plane.
+
+You generally keep your apps to the nodes and the k8s management system to the masters.
+
+K8s supports docker as well as other containers like containerd or crio.
+
 Resources:
 Kubernetes components: https://kubernetes.io/docs/concepts/overview/components/#master-components
+
+Each master has multiple containers to manage k8s:
+etcd -> key-value storage, uses the same Raft protocol, so need odd number. Can also be installed without k8s.
+API -> for us to talk to the cluster and issue orders.
+Scheduler -> decides how and where your containers are placed on the nodes in objects called pods.
+Controller manager -> looks at the state of the whole cluster and everything that's running in it using API. Takes the
+	orders given to it(or the spec) and determines the difference between the order and what's actually going on.
+Core DNS
++ there can be more containers running depending on add-ons you get like networking, storage, or web etc.
+
+Each node has following running:
+the agent called kubelet is running.
+kube-proxy is needed to control the networking.
+
+
+
+105 > Kubernetes local install
+
+Many ways to install.. will focus on the easiest ones for learning.
+If Docker Desktop is installed, just enable K8s in settings. Sets up everything in it's Linux VM.
+For people with Docker toolbox, MiniKube has similar experience(doesn't require toolbox) - uses VirtualBox to create VMs.
+	- Install with minikube-installer.exe and do `$ minikube start`
+	- requires VirtualBox to be installed
+	- Nedds kubectl to be installed separately
+If you have Linux desktop or VM: MicroK8s
+	- uses snap instead of apt/yum, so install that first
+	- `$ microk8s.` + Tab to see all it's commands
+	- installs microk8s.kubectl which you can just alias to kubectl: `alias kubectl=microk8s.kubectl`
+
+In browser:
+play-with-k8s.com - requires you to install the cluster and set it up.
+kadacoda.com - provides the setup for you.
+
+Resources:
+Minikube download: https://github.com/kubernetes/minikube/releases/
+microk8s for Linux hosts: https://github.com/canonical/microk8s
+Install kubectl on Windows without Docker Desktop: https://kubernetes.io/docs/tasks/tools/#install-kubectl-on-windows
+play-with-k8s: https://play-with-k8s.com/
+killercode k8s in your browser: https://killercoda.com/
+
+
+106 > Kubernetes container abstractions
+
+Pod: basic unit of deployment. We don't technically deploy containers, we deploy pods
+	They are 1/more containers running together on a node.
+
+Controllers: control(create/upload) the pods. Technically, you can directly deploy pods, but you won't wanna do that.
+	Controller continually sits there & validates whether or not, what's going on in the k8s is what you've asked it to do.
+	It's a differencing engine that has different types like Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, CronJob
+		etc. and even 3rd party containers.
+
+Service: endpoint you give to a set of pods, a persistent endpoint in the cluster so that everything else can access
+	that set of pods at a specific DNS names and port. Unlike swarm services, it has nothing to do with the deployment.
+
+Namespace: just a filter on your view at the command line, so that you only see the things you care about at the moment.
+	Example, when using docker desktop, it defaults to the default namespace and filters out all the system containers
+		running k8s in the background, cause normally you don't want to see those when running kubectl. You can change
+		the namespace to view those.
+
+Resources:
+Pod overview: https://kubernetes.io/docs/concepts/workloads/pods/
+Service docs: https://kubernetes.io/docs/concepts/services-networking/service/
+Namespace docs: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+
+
+[15] Your first pods
+
+107 > kubectl run, create and apply
+
+kubectl is also evolving.
+
+Resource:
+res/slides-your-first-pods.pdf
+res/section-107-commands-and-links.pdf
+kubectl reference docs: https://kubernetes.io/docs/reference/kubectl/
+
+
+108 > Your first pod with `$ kubectl run`
+
+`$ kubectl version` - are we working? Is the API working?
+
+`$ kubectl run my-nginx --image nginx` - for creating a single pod(unlikely to be used in production), name is required
+-> "pod/my-nginx created" -> doesn't mean the pod is running the container, just means that the request to create the
+	container is received and stored the entry in the etcd DB.
+
+`$ kubectl get pods`
+
+`$ kubectl get all` -> shows the common standard objects. Not all(there are too many). This is per namespace.
+
+Pod is not a real things. It's just an idea of a resource type that wraps around 1/more containers that share
+	the same IP address and the same deployment mechanism.
+	=> all containers in a pod are deployed together in the same node and have access to each other over localhost.
+
+You create pods (via CLI, YAML, API) and k8s creates the containers inside them.
+	You request for the container - which goes to the control plane which instructs the kubelet.
+	The kubelet tells the container runtime(docker/containerd/crio) to create the containers for you.
+
+Resource:
+kubectl cheat sheet: https://kubernetes.io/docs/reference/kubectl/quick-reference/
+kubectl for Docker users: https://kubernetes.io/docs/reference/kubectl/docker-cli-to-kubectl/
+
+109 > Cheat sheets for kubectl
+
+Entire website full of cheat sheets(any topic): https://cheatography.com/
+Kubernetes concepts: https://cheatography.com/gauravpandey44/cheat-sheets/kubernetes-k8s/
+Some commands and resources: https://cheatography.com/deleted-44122/cheat-sheets/kubectl/
+
+
+110 > Your first Deployment with `$ kubectl create deployment`
+
+Kubernetes Deployment - the most popular resource, roughly equivalent to swarm service.
+	Allows you to create 1/more pods with same config across many nodes.
+	For pods with no specific reason for existing(unlike jobs, cron jobs, daemon sets etc.) like your nodejs app etc.
+
+`deploy`, `deployment`, `deployments` - all work
+
+`$ kubectl create deployment my-nginx --image nginx` - likely to be used in production
+	same name works because the previous pod with the same name is a resource of type pod
+		and this is a resources of type deployment.
+
+`$ kubectl get pods`
+`$ kubectl get all`
+
+Your request goes to the API into the etcd DB. The controller manager's job is to look at all the different resource types.
+If it see a new resource type, hopefully, a controller is assigned to that resource type.
+In this case, the resources types of pod & deployment are builtin(to every k8s).
+The controller manager sees the new deployment resource. The controllers manger itself controls deployment resources (it has
+that controller builtin). The job of the deployment resources is to do 1 thing: to create a replica set. It doesn't
+directly create pods. It creates a replicaset for each new deployment type and version to support the rolling upgrade,
+blue-green deployments. Then the replicaset controller(again part of the controller manager) will see the replica set entry
+and create the required pods entries in the DB. The scheduler will notice the pods scheduled to a node. Then it's assigned
+to a kubelet which instructs the container runtime which then creates the container. All happens in seconds.
+
+Hence the pod name displayed is <deployment-name>-<replicaset-name>-<pod-name> to guarantee the unique name.
+
+`$ kubectl delete pod my-nginx`
+`$ kubectl delete deployment my-nginx`
+
+Resources:
+kubectl create deployment docs: https://kubernetes.io/docs/tutorials/kubernetes-basics/deploy-app/deploy-intro/
+Deployment docs: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+
+
+111 > Scaling replicasets
+
+For HA, load balancing, or fault tolerance.
+
+`$ kubectl create deployment my-apache --image httpd`
+
+
+`$ kubectl scale deploy my-apache --replicas 2`
+Or
+`$ kubectl scale deploy/my-apache --replicas 2`
+
+Creates one more(total 2) in the same replicaset as only the replica count is changed.
+If we would change say image name, or image tag it would create a new replicaset. Both replicasets would run side by side
+	for a period of time, while the old one goes away.
+So just the replicaset will be edited to 2. The scheduler in the control plane will see the new pod request,
+	find anode with available resources, schedule the pod for that node and the kubelet on that node will...
+
+Resources:
+ReplicaSets docs: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+
+112 > Changes to kubectl run
+
+Since version 1.18:
+`$ kubectl run` has not reduced complexity and creates a single pod, like `$ docker run` which  creates a single container.
+Other resource creation is moved to the `create` command.
+
+There's also course update project: https://github.com/users/BretFisher/projects/3/views/1
+
+
+
+[16] Inspecting Kubernetes Resources
+
+113 > Section Intro
+
+Nothing much.
+
+Resources:
+res/slides-inspecting-kubernetes-resources.pdf
+res/commands-and-links-inspecting-kubernetes-resources.pdf
+
+
+114 > Inspecting resources with `get`
+
+TODO: continue here ..........
+
+
+115 > Inspecting resources with `describe`
+
+116 > Watching resources
+
+117 > Container logs in kubernetes
+
+Resources:
+System logs (docs): https://kubernetes.io/docs/concepts/cluster-administration/system-logs/
+Logging architecture (docs): https://kubernetes.io/docs/concepts/cluster-administration/logging/
+Debugging running pods (docs): https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/
+Loki, like Prometheus, but for logs: https://github.com/grafana/loki
+ELK stack: https://www.elastic.co/elastic-stack/
+Stern multi-pod log tailing: https://github.com/stern/stern
+
 
 
 
 
 
 Time completed:
-	4:37 after [5]
-	+ 0:40 after [6]
-	+ 0:58 after [7]
-	+ 0:38 after [8]
-	+ 1:10 after [9]
-	+ 0:37 after [10]
-	+ 0:29 after [11]
 	46 mins skipped for later [12]
-	+ 0:22 after [13]
-	Total time completed: 9:31
+	Total time completed after [15] without [12]: 10:24
+	Total time completed after [15] including [12]: 11:08
+
 
 
 Cool stuff:
