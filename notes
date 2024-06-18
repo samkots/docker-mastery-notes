@@ -2302,14 +2302,83 @@ res/commands-and-links-inspecting-kubernetes-resources.pdf
 
 114 > Inspecting resources with `get`
 
-TODO: continue here ..........
+`$ kubectl get all -o wide` -> more details
+`$ kubectl get all -o yaml` -> lot of details with defaults
+`$ kubectl get --help` -> output options including json, go-templates and more
+
+labels & selectors are useful for finding the related resources, especially in large projects
+
+`$ kubectl get deployment/my-apache -o yaml`
 
 
 115 > Inspecting resources with `describe`
 
+`get` is great and focuses on giving you all the info of 1 resource.
+When we create resources, like Deployment, there are related resources like ReplicaSets and pods.
+
+Sometimes it's more helpful to get a comprehensive view of all the things happening and a concise view of the imp details.
+Most commonly used fist touch command `describe`:
+`$ kubectl describe deployment/my-apache`
+`$ kubectl describe pod/my-apache-xxxx-yyyy`
+	Combines key resource details and related resource details into a single human readable output.
+
+Typical workflow of high to low level details:
+
+`$ kubectl get nodes`
+`$ kubectl describe node/<node-name>`
+
+
 116 > Watching resources
 
+Commands to get the real-time info.
+Remember the Unix `watch` command? Kubernetes has similar functionality builtin with `-w` or `--watch` option.
+
+`$ kubectl get pods -w` -> shows all the events occurring with pods in real-time.
+	For example, if we delete a pod directly with `$ kubectl delete pod <pod>`,
+		then we will see the event logs of new pod coming and the old one going away.
+
+`$ kubectl get events --watch-only` -> shows all events happening in real-time. Bit more helpful entries.
+`$ kubectl get events` -> same, but also shows previous entries.
+
+These events are stored in the etcd DB. But this is not a kubernetes log, as there are a lot of things it doesn't have.
+	Like anything outside of the awareness of the kubernetes API, container logs.
+	And This is not meant for long term storage or searching etc.
+	But it's helpful to figure out what's going on when things are misbehaving.
+
+
 117 > Container logs in kubernetes
+
+The container logs are stored, by default, on each node with the container runtime.
+`$ kubectl logs` tell the kubelets on each node wherever the pods are, to start sending the logs to the API,
+	that can them be sent to you.
+It's for troubleshooting, when you are on a very small platform and maybe don't have a centralized logging solution.
+
+`$ kubectl logs deploy/my-apache` -> logs of a deployment? No.
+	It just chooses a random pod within it and shows it's logs. It the pod has multiple containers, the first one is chose.
+	I.e. the first one listed in YAML > spec > containers list
+
+`$ kubectl logs deploy/my-apache --follow --tail 1` -> follow only the new log entries with 1 historical entry
+
+`$ kubectl logs pod/my-apache-xxxx-yyyy -c httpd` -> logs of a specific container in a specific pod
+
+`$ kubectl logs pod/my-apache-xxxx-yyyy --all-containers=true` -> logs of all containers in a specific pod merged
+	Difficult to watch as there's not date/time and the order is not guaranteed.
+
+But we have 2 pods. What if we didn't know which pod is misbehaving? We can use label search to watch those logs.
+`$ kubectl describe deployment/my-apache` -> see the "Labels: <lable>" in output, example: "app=my-apache"
+
+We can search for any pod with that label to show the logs: `$ kubectl logs -l <label>` Example:
+`$ kubectl logs -l app=my-apache` -> kind of merged logs.
+	Again, this works when you have few containers.
+		But as you grow, you are gonna need centralized logging.
+
+There are other tools that can help like stern on GitHub. Makes a little bit easier to find these logs.
+`$ stern my-apache`
+	Does things like:
+		- auto collecting logs from multiple pods
+		- colorizing the logs from different pods which kubernetes doesn't do
+
+`$ kubectl delete deployment/my-apache`
 
 Resources:
 System logs (docs): https://kubernetes.io/docs/concepts/cluster-administration/system-logs/
@@ -2320,14 +2389,50 @@ ELK stack: https://www.elastic.co/elastic-stack/
 Stern multi-pod log tailing: https://github.com/stern/stern
 
 
+[17] Exposing Kubernetes Ports
+
+118 > Section intro
+
+TODO: ----- CONTINUE HERE -----
+
+Resources:
+res/slides-exposing-kubernetes-ports-with-services.pdf
+res/commands-and-links-exposing-kubernetes-ports.pdf
+
+
+119 > Service types
+
+Resources:
+Services docs: https://kubernetes.io/docs/concepts/services-networking/service/
+Service types docs: https://kubernetes.io/docs/tutorials/services/
+
+
+120 > MicroK8s and DNS for services
+121 > Creating a ClusterIP service
+
+Resources:
+Using Services docs: https://kubernetes.io/docs/tutorials/kubernetes-basics/expose/expose-intro/
+
+122 > Running netshoot in kubernetes
+123 > Creating a NodePort and LoadBalancer service
+
+Resources:
+NodePort docs: https://kubernetes.io/docs/concepts/services-networking/service/#nodeport
+
+124 > Kubernetes services DNS
+
+Resources:
+Kubernetes DNS specification: https://github.com/kubernetes/dns/blob/master/docs/specification.md
+CoreDNS for kubernetes: https://coredns.io/plugins/kubernetes/
+
 
 
 
 
 Time completed:
 	46 mins skipped for later [12]
-	Total time completed after [15] without [12]: 10:24
-	Total time completed after [15] including [12]: 11:08
+	Total time completed after [16] without [12]: 10:57
+	Total time completed after [16] including [12]: 11:41
 
 
 
