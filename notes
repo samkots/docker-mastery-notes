@@ -308,7 +308,7 @@ Typical default networks:
 Examples:
 `$ docker network create my_app_net` -> creates new network with the default driver bridge
 	the bridge driver simply creates a virtual network locally with it's own subnet somewhere around 172.17 & above
-	goes incrementally like 18, 19, 20...  it doesn't have any advanced features like overlaied networks that allow
+	goes incrementally like 18, 19, 20... it doesn't have any advanced features like overlaied networks that allow
 	privet networking between hosts and other 3rd party drives like Weave
 
 `$ docker container run --network my_app_net nginx` -> creates a new container in that network
@@ -2049,7 +2049,7 @@ Self-managed solutions are vendor's product which you will install on on the ser
 	Use the certified distributions in the link below so you can change from one vendor to another.
 
 Another option: use raw GitHub upstream version of kubernetes.
-But you probably don't need it.  Kubernetes needs a lot of things added to really make it easy to use OOTB.
+But you probably don't need it. Kubernetes needs a lot of things added to really make it easy to use OOTB.
 So you will probably want the extra vendor solutions like custom auth, custom web administration, custom networking etc.
 But it's great for learning and recommended to start with as the way to learn K8s.
 
@@ -2282,7 +2282,7 @@ ReplicaSets docs: https://kubernetes.io/docs/concepts/workloads/controllers/repl
 112 > Changes to kubectl run
 
 Since version 1.18:
-`$ kubectl run` has not reduced complexity and creates a single pod, like `$ docker run` which  creates a single container.
+`$ kubectl run` has not reduced complexity and creates a single pod, like `$ docker run` which creates a single container.
 Other resource creation is moved to the `create` command.
 
 There's also course update project: https://github.com/users/BretFisher/projects/3/views/1
@@ -2393,7 +2393,7 @@ Stern multi-pod log tailing: https://github.com/stern/stern
 
 118 > Section intro
 
-TODO: ----- CONTINUE HERE -----
+Nothing much.
 
 Resources:
 res/slides-exposing-kubernetes-ports-with-services.pdf
@@ -2402,24 +2402,193 @@ res/commands-and-links-exposing-kubernetes-ports.pdf
 
 119 > Service types
 
+Now that you have your pods running, you will mostly want to expose them outside at some point
+	i.e. allow them to accept connections in some fashion in our from outside of the cluster.
+
+One of the ways to create a service: `$ kubectl expose`.
+Remember: a service is an endpoint that's consistent so that other things inside/outside of the cluster
+	might be able to access it.
+
+Pods don't automatically get DNS names for external connectivity with an IP address. We need to create a service
+	on top of that existing pod.
+
+Multiple ways. The common one is: CoreDNS (one of the core features of the control plane) will be our DNS server
+On top of that, how it gets the traffic to your service is the job of one of the following service types:
+	- ClusterIP
+	- NodePort
+	- LoadBalancer
+	- ExternalName
+
+1. Service type "ClusterIP" (default)
+Only available in the cluster => 1 set of pods talking to another set of pods.
+	Doesn't need anything special(firewall rules outseid of the cluster for traffic to get to it).
+Gets it's own DNS address(in CoreDNS).
+Gets a VIP in that virtual IP address space inside the cluster.
+	That allows other pods inthe cluster to talk to this service using it's port.
+	So if you are running an nginx app on port 80, you could have the service IP also on port 80 for consistency.
+	Similar to when you create a swarm service and it gets an internal IP on the load balancer
+		and it runs it on the port that the app is on.
+
+2. Service type "NodePort"
+
+Designed for something outseide of the cluster to talk to your service through the IP address on the nodes themselves.
+So, creating a NodePort, you will get a high port(like port 80 wont work) on each node that's assigned to this service.
+Once you get that, you can update other things that need to know about this port.
+=> anyone can connect if they can reach the node
+
+These 2 services are always available in any kubernetes cluster: cloud, your own k8s, Docker Enterprise, Rancher etc.
+
+3. Service type "LoadBalancer"
+Mostly used in the cloud for traffic coming to the cluster from an external source.
+Controls an external LB to the cluster through the k8s command line.
+Essentially, it's a bunch of automation. It's going to auto create the clusterIP in NodePort so that they are available.
+	And then it's gonna talk to the external system like AWS LB.
+
+Basically, these are gonna come from the infrastructure provider
+	and they will allows k8s to talk to them through some remote API and configure them for you.
+	For example, when you use AWS LB, it's creating those ClusterIPs & NodePorts in the back-end but it's also telling
+		the AWS LB to talk to the NodePorts.
+
+4. Service type "ExternalName"
+Used less often and has nothing to do about controlling inbound traffic to your service.
+This is more about stuff in the cluster needing to talk to outside services.
+Creates DNS names in CoreDNS system, so the cluster can resolve external names that you might not have control over.
+
+One of the reasons you will use them is when your are doing migrations of things.
+Like, you have a remote app outside your cluster which already has a DNS name.
+But if your are moving something, say from those external services to the internal services, you might look at how you
+can use ExternalName as a substitute to control the DNS inside your k8s workflow
+
+
+Apart from these 4, there's another way the traffic can get inside the cluster: through ingress.
+Specifically designed for HTTP traffic. Discussed later.
+
 Resources:
 Services docs: https://kubernetes.io/docs/concepts/services-networking/service/
 Service types docs: https://kubernetes.io/docs/tutorials/services/
 
 
 120 > MicroK8s and DNS for services
+
+Internal cluster DNS isn't a mandatory required feature of k8s(unlike etcd, API, scheduler, controller managing, kubelets).
+The standard DNS used in k8s is the CoreDNS project and is usually installed as part of your k8s distribution,
+	cause you can't use k8s service resources without it. For 1 pod to talk to another, you usually need a service endpoint
+	which usually needs a friendly DNS name, which needs CoreDNS.
+
+Bret: "Services are used in every cluster I have seen, so I consider CoreDNS as a required service in any k8s".
+
+MicroK8s tries to be as minimal as possible on a default install, so an extra step to install CoreDNS is required.
+If you are using microk8s, you will need to enable CoreDNS to continue the course:
+`$ microk8s enable dns`
+`$ microk8s status`		`- to check the status
+
+More info on MicroK8s:
+	- home: https://coredns.io/
+	- getting started: https://microk8s.io/docs/getting-started
+	- command reference: https://microk8s.io/docs/command-reference
+
+
 121 > Creating a ClusterIP service
+
+ClusterIP demo using simple HTTP web server which when hit with curl, returns it's environment variables:
+
+Watch the pods on one window:
+	`$ kubectl get pods -w`
+
+Create the deployment:
+	`$ kubectl create deployment httpenv --image=bretfisher/httpenv`
+
+Scale the deployment up:
+	`$ kubectl scale deployment/httpenv --replicas=5`
+
+Create the service:
+	`$ kubectl expose deployment/httpenv --port 8888`
+		-> doesn't make any changes to the pods, but creates a service(ClusterIP by default) in front of the deployment
+
+Check the newly created service:
+	`$ kubectl get service` -> there will be 2: one will be the kubernetes endpoint for API and the one we created
+
+Remember ClusterIP is only usable inside the cluster. So we need another pod in the cluster to curl it.
+Just another pod, no deployment needed:
+	`$ kubectl run tmp-shell --rm -it --image bretfisher/netshoot -- bash`
+		- similar options to docker, the image has a bunch of networking and Linux utilities in it
+
+Now we have a prompt inside the pod(container).
+The service name that we created becomes part of the DNS name that we created.
+So similar to swarm, we can use the service name to get it with DNS:
+	`$ curl httpenv:8888`
+
+		This goes to one of the 5 pods of the deployment and we get it's environment variables,
+			including hostname which is the pod name. Running it again can go to another pod.
 
 Resources:
 Using Services docs: https://kubernetes.io/docs/tutorials/kubernetes-basics/expose/expose-intro/
 
+
 122 > Running netshoot in kubernetes
+
+The netshoot image contains utility for troubleshooting Linux, Docker, Kubernetes and networking. Hence the name netshoot.
+It runs zsh by default, but the previous example replaced it with bash
+	just to show how the `--` separates the `kubectl` options and the custom command.
+
+
 123 > Creating a NodePort and LoadBalancer service
+
+Let's expose a NodePort so we can access is via the host IP(outside the cluster).
+`$ kubectl expose deployment/httpenv --port 8888 --name httpenv-np --type NodePort`
+`$ kubectl get services` -> shows new service with ports something like: 8888:31078/TCP
+	This is opposite of the swarm format. The port on the left is inside the container.
+	The port on the right is the port on your nodes exposed to the outside world. It came from a default range of NodePorts
+	that's preset inside the cluster: 30000-32767 (configurable)
+
+On localhost:
+`$ curl localhost:31078` -> request from the outside: returns response
+	on Mac/Windows, Docker Desktop provides a convenience layer(called vpnkit) to allow us to directly use this command.
+
+NodePort internally creates a ClusterIP. It takes the connection coming into the high port
+	and redirects it to the ClusterIP for that service. Configurable: can avoid the ClusterIP.
+
+Remember LoadBalancer service isn't builtin and needs to be provided by an external service like cloud.
+Like Amazon has ELBs and ALBs. And you'll need to add that plugin in your kubernetes for it to work with those external LBs.
+Essentially, the kube API talks to their API to control that LB.
+Docker Desktop also comes with a builtin LoadBalancer service. So, you can do:
+`$ kubectl expose deployment/httpenv --port 8888 --name httpenv-lb --type LoadBalancer`
+
+As load balancers are 3rd party, they all have varying features. In this case, the Docker Desktop LB service plugin will
+publish it on the port 8888. It's the one way to have the Kubernetes on a specific port outside the default range.
+It allows you to run it on port 80 or whatever. So you can do:
+`$ curl localhost:8888` -> returns the response
+
+The LoadBalancer internally auto creates NodePort & ClusterIP services.
+	The LoadBalancer is accepting the packet and passing it into the NodePort which is then passing it to the ClusterIP.
+
+That's why, `$ kubectl get services` also shows the LB service with ports something like: 8888:31933/TCP,
+	cause there's always going to be that NodePort even though that's not really the port the LB is using on the localhost.
+
+Let's clean up. You can delete multiple objects in the same command. They don't even have to be related objects.
+`kubectl delete service/httpenv service/httpenv-np service/httpenv-lb deployment/httpenv`
 
 Resources:
 NodePort docs: https://kubernetes.io/docs/concepts/services-networking/service/#nodeport
 
 124 > Kubernetes services DNS
+
+Sometimes, we take DNS for granted cause inside docker/swarm/k8s, the DNS kinda just works.
+	Cause if you curl/ping a service name, you get back the response.
+
+Although DNS is optional/add-on, everyone puts one in there.
+Starting with 1.11 release, CoreDNS is the default. Earlier KubeDNS is now deprecated.
+Like Swarm, this is DNS based service discovery. When you create a service, you get the hostname that matches the service.
+But here, that host name is part of the larger name the FQDN.
+But if you start using namespace, you can have things with same names in different namespaces inside the same cluster.
+The service FQDN:
+<hostname>.<namespace>.svc.cluster.local
+	- default namespace is "default"
+	- the "cluster.local" is the default service DNS name given to the cluster when it was created
+		if you use kubeadm to build the cluster, you can change that name, maybe if you want to create multiple clusters,
+			or if you have some external requirements about how your apps bind each other.
+
+In short, this DNS is inside the cluster only.
 
 Resources:
 Kubernetes DNS specification: https://github.com/kubernetes/dns/blob/master/docs/specification.md
@@ -2427,12 +2596,123 @@ CoreDNS for kubernetes: https://coredns.io/plugins/kubernetes/
 
 
 
+[18] Kubernetes Management Techniques
+
+125 > Section intro
+
+Kubernetes is unopinionated and has multiple ways to use. But what's the best one? Discussed in the section.
+
+Resources:
+res/slides-kubernetes-management-techniques.pdf
+res/commands-and-links-kubernetes-management-techniques.pdf
+
+126 > YAML generator in kubectl commands
+
+TODO: ----- CONTINUE HERE -----
+
+Resources:
+kubectl usage conventions: https://kubernetes.io/docs/reference/kubectl/conventions/
+
+127 > Imperative vs declarative
+128 > Three management approaches
+
+Resources:
+Kubernetes management techniques (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/object-management/
+Imperative command examples: https://kubernetes.io/docs/tasks/manage-kubernetes-objects/imperative-command/
+Imperative config files (doc tutorials): https://kubernetes.io/docs/tasks/manage-kubernetes-objects/imperative-config/
+Declarative config files: https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/
+
+[19] Moving to Declarative Kubernetes YAML
+
+129 > Section intro
+Resources:
+res/s16-slides-moving-to-declarative-yaml.pdf
+res/dm-s16-moving-to-declarative-kubernetes-yaml.txt
+130 > Kubectl apply
+Resources:
+Declarative management of kubernetes (docs): https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/
+131 > Kubectl configuration YAML
+Resources:
+Understanding kubernetes objects & specs (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/
+132 > Building your YAML files
+133 > Building your YAML specs
+Resources:
+Kubernetes API reference (docs): https://kubernetes.io/docs/reference/#api-reference
+134 > Dry run CLI changes
+135 > Dry runs and diffs
+Resources:
+APIServer dry run & kubectl diff: https://kubernetes.io/blog/2019/01/14/apiserver-dry-run-and-kubectl-diff/
+136 > Labels and label selectors
+Resources:
+Label selectors (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+Difference between labels & annotations: https://vsupalov.com/kubernetes-labels-annotations-difference/
+Recommended labels: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+Assigning pods to nodes (docs): https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+Taints and tolarations (docs): https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+
+
+
+[20] Your next steps and the future of kubernetes
+
+137 > Section intro
+Resources:
+res/s17-slides-your-next-steps-and-the-future-of-kubernetes.pdf
+res/dm-s17-your-next-steps-and-the-future-of-kubernetes.txt
+138 > Storage in kubernetes
+Resources:
+Volumes (docs): https://kubernetes.io/docs/concepts/storage/volumes/
+StatefulSets (docs): https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/
+PersistentVolume (docs): https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+139 > Ingress
+Resources:
+Ingress (docs): https://kubernetes.io/docs/concepts/services-networking/ingress/
+Ingress controllers (docs): https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/
+Setup ingress on Minikube with nginx ingress controller (docs):
+	https://kubernetes.io/docs/tasks/access-application-cluster/ingress-minikube/
+Traefik ingress: https://doc.traefik.io/traefik/v2.0/providers/kubernetes-crd/#traefik-ingressroute-definition
+140 > CRT's and the operator pattern
+Resources:
+Custom resources (docs): https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+The operator pattern (docs): https://kubernetes.io/docs/concepts/extend-kubernetes/operator/
+OperatorHub: https://operatorhub.io/
+Awesome operators lisg: https://github.com/operator-framework/awesome-operators
+141 > Higher development abstractions
+Resources:
+Spreadsheet of k8s deployment tools:
+Deploying compose on kubernetes:
+	https://docs.google.com/spreadsheets/d/1FCgqz1Ci7_VCz_wdh8vBitZ3giBtac_H8SBw4uxnrsE/edit#gid=0
+Introducing kustomize: https://github.com/docker/compose-on-kubernetes/tree/master/docs
+Kustomize GitHub: https://github.com/kubernetes-sigs/kustomize
+Docker App GitHub: https://github.com/docker/app
+CNAB spec: https://cnab.io/
+142 > Kubernetes dashboard
+Resources:
+The kubernetes dashboard: https://github.com/kubernetes/dashboard
+143 > Namespaces and context
+Resources:
+Configure access to multiple clusters:
+	https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/
+Namespace (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+144 > Future of kubernetes
+Resources:
+Kubernetes release notes: https://kubernetes.io/releases/notes/
+
+[21] Automated CI Workflows
+[22] GitHub Actions	Workflow Examples
+[23] Docker Security Good Defaults and Tools
+[24] Docker 19.03 Release New Features
+[25] DovOps and Docker Clips
+[26] Dockerfiles and Docker Images in 2022
+[27] Dockerfiles and Docker Images in 2022
+
+
+
 
 
 Time completed:
 	46 mins skipped for later [12]
-	Total time completed after [16] without [12]: 10:57
-	Total time completed after [16] including [12]: 11:41
+	Total time completed after [17] without [12]: 11:26
+	Total time completed after [17] including [12]: 12:10
 
 
 
