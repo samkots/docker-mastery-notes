@@ -2695,27 +2695,121 @@ Declarative config files: https://kubernetes.io/docs/tasks/manage-kubernetes-obj
 [19] Moving to Declarative Kubernetes YAML
 
 129 > Section intro
-
-TODO: ----- CONTINUE HERE -----
+Nothing much.
 
 Resources:
 res/s16-slides-moving-to-declarative-yaml.pdf
 res/dm-s16-moving-to-declarative-kubernetes-yaml.txt
+
 130 > Kubectl apply
+
+`$ kubectl apply -f file.yml`
+`$ kubectl apply -f dir/`
+`$ kubectl apply -f <url>`
+
+	-> create/update stuff.
+
 Resources:
 Declarative management of kubernetes (docs): https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/
+
 131 > Kubectl configuration YAML
+
+JSON works too but YAML is better for humans.
+You can have all in one file or one file per object.
+Full description of a resource(deployment/job/secret etc.) is called a manifest. Each file container 1/more manifests.
+Each manifest needs 4 root keys:
+	- apiVersion
+	- kind
+	- metadata
+	- spec
+
+Examples: course-git-repo: k8s-yaml
+
 Resources:
 Understanding kubernetes objects & specs (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/
+
 132 > Building your YAML files
+
+Things evolve and we need a way to know how to update our YAML files without going throu every detail of the docs.
+
+`kubectl api-resources` -> list of resources supported by the cluster.
+	Some kinds are listed multiple types as there are old and new versions.
+
+`kubectl api-versions` -> shorter list of different versions that we need to worry about.
+
+kind + api version decide which resource you are going to get
+	and which api version you are gonna be able to use for that resource.
+
+Then you'll add `metadata:`, where only the `name:` is required.
+Then you'll add `spec:`, which is where all the action is as it's completely different based on which kind it is.
+
 133 > Building your YAML specs
+
+`kubectl explain <kind> --recursive` -> All the keys supported by the kind in the YAML file.
+
+`kubectl explain services.spec` -> Lists sub-keys of `spec` with some description.
+`kubectl explain services.spec.type` -> Can keep drilling down the dot-notation.
+
+Another quirk with kubernetes: docs on the command lines are a little outdated when it comes to versions.
+	So, always use the `api-versions` command along with `api-resources`.
+	It shows the docs of the version of the client. If your server's version is different, you need to refer the online docs.
+
+Docs link in the resources below is recommended.
+
 Resources:
 Kubernetes API reference (docs): https://kubernetes.io/docs/reference/#api-reference
-134 > Dry run CLI changes
+
+134 > Dry run CLI changes correction
+
+The `--dry-run` and `--server-dry-run` are old options.
+Newer options: `--dry-run=client` and `--dry-run=server`.
+
 135 > Dry runs and diffs
+
+New option that allows us to see what we are going to change and also works with the `apply` command.
+It now also sends the YAML to the server and compares & figure what needs to happen and report back to CLI.
+
+course-git-repo: k8s-yaml/app.yml
+`kubectl apply -f app.yml --dry-run=client` -> will just say "these objects created"
+
+`kubectl apply -f app.yml --dry-run=server` -> will talk to the server and say changed/unchanged, but no specifics
+
+`kubectl diff -f app.yml` -> will compare the YAML to the spec running on the server and return proper diff
+
+The `apply` command is general and better than the specific `create`, `replace`, and `delete`.
+
 Resources:
 APIServer dry run & kubectl diff: https://kubernetes.io/blog/2019/01/14/apiserver-dry-run-and-kubectl-diff/
-136 > Labels and label selectors
+
+136 > Labels and Label Selectors
+
+Labels go under `metada:` and are simple optional list of `key: value` pairs.
+For identifying your resource later by selecting, grouping, or filtering it. Can be anything that describes the resource.
+For keys and values, you can have your own conventions. Like: `tier: frontend`, `app: api`, `env: prod`, `customer`: `<name>`
+
+Annotations are for more complex/multi-value data etc. Can store config data
+
+`$ kubectl get pods -l app=nginx` -> filter by label. Can add ',' to add multiple.
+	There's whole bunch of syntax with "or"s and "and"s.
+
+`$ kubectl apply -f file.yml -l app=nginx` -> to apply only certain part of the yaml file.
+
+Label Selectors are "glue" telling services and deployments which pods are theirs.
+Example, the services need to know which pods to send the traffic to. The services really need to talk to the pods rather
+than the deployment itself.
+
+YAML service > `spec.selector` matches with YAML deployment > `spec.selector.matchLables`.
+Both the objects are selecting pods based on the match.
+That means YAML deployment > `spec.template.metadata` needs to have that lable in it
+	so that those resources can find their pods.
+
+Many resources use Label Selectors to "link" resource dependencies.
+
+Labels and Selectors are used to control which pods go to which nodes.
+Taints and Tolerations also control node placement. These can get really custom and advanced really quickly.
+	And these two together with Labels & Selectors can get a bit hairy and crazt.
+	So, avoid these two until you really need them. And keep is simple out of the box.
+
 Resources:
 Label selectors (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 Difference between labels & annotations: https://vsupalov.com/kubernetes-labels-annotations-difference/
@@ -2728,6 +2822,9 @@ Taints and tolarations (docs): https://kubernetes.io/docs/concepts/scheduling-ev
 [20] Your next steps and the future of kubernetes
 
 137 > Section intro
+
+TODO: ----- CONTINUE HERE -----
+
 Resources:
 res/s17-slides-your-next-steps-and-the-future-of-kubernetes.pdf
 res/dm-s17-your-next-steps-and-the-future-of-kubernetes.txt
@@ -2786,8 +2883,9 @@ Kubernetes release notes: https://kubernetes.io/releases/notes/
 
 Time completed:
 	46 mins skipped for later [12]
-	Total time completed after [18] without [12]: 11:48
-	Total time completed after [18] including [12]: 12:32
+	Total time completed after [19] without [12]: 12:29
+	Total time completed after [19] including [12]: 13:13
+
 
 
 
