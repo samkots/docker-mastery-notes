@@ -2608,13 +2608,83 @@ res/commands-and-links-kubernetes-management-techniques.pdf
 
 126 > YAML generator in kubectl commands
 
-TODO: ----- CONTINUE HERE -----
+Some of the commands we've been using so far have a bit of automation behind them known as generators.
+	They are the templates that create the spec to apply to the cluster based on the command line options.
+	Automation, like giving the fields their defaults that you don't specify. To make the CLI easier.
+		Swarm kinda does this too.
+
+These generators can change/evolve over time. You can see what all stuff is happening behind the scene with dry-run:
+`$ kubectl create deployment sample --image nginx --dry-run=client -o yaml`
+`$ kubectl create job test --image nginx --dry-run=client -o yaml`
+`$ kubectl expose deployment/test --port 80 --dry-run=client -o yaml` - the deployment needs to actually exist
+
+Generators are kinda slightly opinionated defaults but still work for most use cases.
 
 Resources:
 kubectl usage conventions: https://kubernetes.io/docs/reference/kubectl/conventions/
 
 127 > Imperative vs declarative
+
+Meaning in terms of software:
+Imperative: Focus is on how the program operates. Each step in order one after the other.
+Example, to get a coffee: you need to think of every step of how you will create the coffee.
+
+Declarative: More about what the program should accomplish. What are it's end goals.
+	We don't care so much how it gets there, just that it does get there.
+Example, to get a coffee: you describe the coffee to the barista who then figures how to produce it.
+
+
+In Kubernetes:
+
+Imperative example: `run`, `create deployment`, `update` commands
+	- We start we the state we know(like no deployment exists).
+	- We order it to create a new deployment
+Different commands are required to change the deployment.
+Different commands are required per object.
+Easier when:
+	- when you know the state
+	- getting started
+	- for humans at the CLI
+But, it's not easy to automate.
+
+Declarative:
+We don't know the state. Do they have to make the coffee from scratch or have it already made? We just know the end result.
+
+Example: `kubectl apply -f my-resources.yml`
+	- we don't know the current state
+	- we only know what we want and the end result to be(YAML contents)
+Same command each time(tiny exceptions for delete).
+Single or multiple YAML files are supported. Can apply entire directory.
+Easiest way to automate.
+Also the easiest way to GitOps happiness.
+	TODO: Google GitOps. It's a type of doing dev ops using git as the source of truth.
+
 128 > Three management approaches
+
+3 approaches.
+1. Imperative commands - what we've been doing so far.
+2. Imperative objects: you can use the create commands with the yaml files:
+	- `create -f file.yml`:
+		It will create the objects in the files, you can have anything:
+			deployment + service, storage needs, networking setups etc.
+	- `replace -f file.yml`:
+		You can then edit the file to replace the objects.
+	- `delete ...`: and delete them
+
+	Good for prod of small environments.
+	It's kind of middle ground. You are still using YAML => you have documented it and you have the change record in git.
+3. Declarative objects:
+	- `apply -f file.yml` or dir\ or diff.
+	- Best for prod, easier to automate.
+
+Recommended to read the page on the management approaches mentioned in the resources below.
+
+Important rule: don't mix the three approaches.
+Bret's recommendations:
+	- Learn the imperative CLI.
+	- Stick to Declarative objects in prod.
+	- Store the YAMLs in git and commit each change before you apply.
+	- This trains you for later doing GitOps(where git commits are auto applied to clusters).
 
 Resources:
 Kubernetes management techniques (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/object-management/
@@ -2625,6 +2695,9 @@ Declarative config files: https://kubernetes.io/docs/tasks/manage-kubernetes-obj
 [19] Moving to Declarative Kubernetes YAML
 
 129 > Section intro
+
+TODO: ----- CONTINUE HERE -----
+
 Resources:
 res/s16-slides-moving-to-declarative-yaml.pdf
 res/dm-s16-moving-to-declarative-kubernetes-yaml.txt
@@ -2697,6 +2770,8 @@ Namespace (docs): https://kubernetes.io/docs/concepts/overview/working-with-obje
 Resources:
 Kubernetes release notes: https://kubernetes.io/releases/notes/
 
+
+
 [21] Automated CI Workflows
 [22] GitHub Actions	Workflow Examples
 [23] Docker Security Good Defaults and Tools
@@ -2711,8 +2786,8 @@ Kubernetes release notes: https://kubernetes.io/releases/notes/
 
 Time completed:
 	46 mins skipped for later [12]
-	Total time completed after [17] without [12]: 11:26
-	Total time completed after [17] including [12]: 12:10
+	Total time completed after [18] without [12]: 11:48
+	Total time completed after [18] including [12]: 12:32
 
 
 
