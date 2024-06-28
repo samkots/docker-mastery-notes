@@ -2822,31 +2822,106 @@ Taints and tolarations (docs): https://kubernetes.io/docs/concepts/scheduling-ev
 [20] Your next steps and the future of kubernetes
 
 137 > Section intro
-
-TODO: ----- CONTINUE HERE -----
+Nothing much
 
 Resources:
 res/s17-slides-your-next-steps-and-the-future-of-kubernetes.pdf
 res/dm-s17-your-next-steps-and-the-future-of-kubernetes.txt
+
 138 > Storage in kubernetes
+
+The StatefulSets resource type is used in this area.
+Bret recommended not to use it in your initial deployments as it's complex and recommends using cloud DBs.
+
+Volumes:
+	- Connect to pod(all the containers in it share them).
+	- Tied to life cycle of the pod.
+PersistentVolumes:
+	- Created at cluster level and outlive pods.
+	- Separate storage config from the pods using them
+	- Multiple pods can share them(by "claiming" them)
+
+	- Often, there would be a separate storage team, often dealign with 3rd party storage, who will manage/create
+		persistent volumes and the app deployers will make claums like "hey, I need this type of volume or SSD or
+		RAM storage" and that storage will be provided because the storage team already set it up kin kubernetes..
+
+Earlier, any third part storage(cloud, 3rd party vendor storage or anything custom) was added in k8s code tree itself and
+	shipped with k8s in it's binaries. This was challenging and all had to comply with the k8s release cycle.
+So, all came together and created a standard: Container Storage Interface [CSI] with a standard API.
+	Now storage vendors can provide plugins that you would install on all the nodes.
+
 Resources:
 Volumes (docs): https://kubernetes.io/docs/concepts/storage/volumes/
 StatefulSets (docs): https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/
 PersistentVolume (docs): https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+
 139 > Ingress
+
+We haven't yet talked about OSI layer 7 [or HTTP name routing or DNS routing].
+Basically, if you are on a server with multiple sites that need to use the same ports, then you need something there that
+routs to different containers based on something other than just the port. That in kubernetes is known as "ingress".
+It's a specific resource and not necessarily a load balancer or anything that you would attribute to a service.
+The ingress project is focused on the common problem of most clusters running lots of different websites or containers
+	for different URLs and names.
+
+It's not installed by default, but there are official features for it.
+Kubernetes provides mechanism for 3rd party HTTP proxies. So, you install the ingress in your cluster and tell your apps
+	how to use that proxy(based on which one you use) to get to your container.
+
+So, for example, you have site-a.com and site-b.com. They will be two different deployments. You need to somehow get the
+same ports on all your nodes(like 80443). You need to get different websites to different containers and that's what
+ingress is for.
+Swarm doesn't have it out of the box. There, we have to deploy some container as some proxies as a contaiener.
+For ingress examples, nginx is very popular, but new ones like Traefik are good too. (It was created for the containers).
+
 Resources:
 Ingress (docs): https://kubernetes.io/docs/concepts/services-networking/ingress/
 Ingress controllers (docs): https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/
 Setup ingress on Minikube with nginx ingress controller (docs):
 	https://kubernetes.io/docs/tasks/access-application-cluster/ingress-minikube/
 Traefik ingress: https://doc.traefik.io/traefik/v2.0/providers/kubernetes-crd/#traefik-ingressroute-definition
-140 > CRT's and the operator pattern
+
+140 > CRDs [Custom Resource Definition] and the operator pattern
+
+When we add all these 3rd party tools and there are all these APIs to extend it,
+	Kubernetes itself becomes it's own platform for you to do things that it was never designed to do.
+
+We can add 3rd party stuff to kubernetes which doesn't just use the kubernetes API but
+	with custom resources & custom controllers, it can change/extend the API. Even kubectl can get new commands.
+	It can see new resource types and controllers
+
+A few years ago, CoreOS came up with the operator pattern which was their way of implementing custom resources and
+	custom controllers together that allows you to use previously complicated software in kubernetes,
+		but the kubernetes is aware of that software.
+
+CRDs and the operator pattern can help with things like monitoring, databases, backup, logging etc.
+	It gives it more intelligence than YAML files.
+
 Resources:
 Custom resources (docs): https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
 The operator pattern (docs): https://kubernetes.io/docs/concepts/extend-kubernetes/operator/
 OperatorHub: https://operatorhub.io/
 Awesome operators lisg: https://github.com/operator-framework/awesome-operators
+
 141 > Higher development abstractions
+
+Kubernetes has limited builtin templating, versioning, tracking and management of you apps.
+There are ~ 60 3rd party tools/ways simply to deploy your app on k8s. And there are logs of opinions.
+The most popular is Helm. The de facto way of creating templates and template standards
+	for deploying 3rd party apps or creating your own custom "Helm charts"(Helm's YAML that generates k8s YAML).
+Docker has their own opinions: "Compose on Kubernetes" - comes with Docker Desktop.
+	- `$ docker stack deploy` deploys to kubernetes instead of swarm. The command allows to specify your orchestrator.
+	- Compose YAML -> Kubernetes YAML
+	- Allows to keep single format: Compose YAML, but it's simple and can't support all the k8s features (80/20 rule).
+	- There's also `$ docker app <command>` sub command that does templating for Compose YAML
+
+Your distro will have it's opinions too. But most distros support Helm
+
+These templating tools are just helping you template your YAML in various ways.
+
+"Kustomize" is the official k8s feature that works OOTB. But not yet as powerful as Helm.
+	It takes your standard YAMLs, run something else on top of it and change/override it.
+
 Resources:
 Spreadsheet of k8s deployment tools:
 Deploying compose on kubernetes:
@@ -2855,21 +2930,74 @@ Introducing kustomize: https://github.com/docker/compose-on-kubernetes/tree/mast
 Kustomize GitHub: https://github.com/kubernetes-sigs/kustomize
 Docker App GitHub: https://github.com/docker/app
 CNAB spec: https://cnab.io/
+
 142 > Kubernetes dashboard
+
+The "Kubernetes Dashboard" is, not OOTB, but an official web GUI project.
+
+Warning: keep it private/internal or use random high ports and keep it behind an authentication wall. 
+This has been hacked in the past like people hacked it and used the company's system to mint bit coins!
+
 Resources:
 The kubernetes dashboard: https://github.com/kubernetes/dashboard
+
 143 > Namespaces and context
+
+Namespace are virtual clusters or views inside a single cluster.
+Filters the views of the commands and also with the right network policy plugins, can control the networking.
+It's different than swarm, where you would create overlay networks and everything was private.
+But in k8s, all of it depends on your network plugin.
+
+`$ kubectl get namespaces`
+
+There are some default ones to hide the kubernetes stuff. The default is "default".
+
+`$ kubectl get all --all-namespaces` -> everything
+
+Context comes into to play when setting your view.
+There are three parts of a context: cluster, k8s user auth, and namespace.
+	All of it is defined by default in `~/.kube/config` YAML file.
+		Typically contains secrets, not to be shared
+
+`$ kubectl config get-context` -> shows the file's contents in a nicer format.
+`$ kubectl config set*` -> set options to set any of the defaults.
+
 Resources:
 Configure access to multiple clusters:
 	https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/
 Namespace (docs): https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+
 144 > Future of kubernetes
+
+More focus on stability and security.
+More and improved operators & 3rd party tools.
+More declarative style features.
+
+Other related projects:
+Kubernetes is "differencing and scheduling engine backbone" and not meant to be used directly
+	but meant for other people to build abstractions on top of it. That's why so many distros.
+
+Some of those higher layers:
+	Knative: serverless workloads on kubernetes
+	k3s: mini, simple kubernetes
+		k3OS: minimal Linux OS for k3s
+		- original goal was for IOT
+		- now goal: make k8s as simple as swarm
+	Service Mesh: New concept: an idea of proxy layer throughout the entire cluster. Not just for incoming connections
+		bur for all the parts of the app.
+		Came out to solve problems of micro services.
+
 Resources:
 Kubernetes release notes: https://kubernetes.io/releases/notes/
 
 
 
 [21] Automated CI Workflows
+
+TODO: ----- CONTINUE HERE -----
+
+
+
 [22] GitHub Actions	Workflow Examples
 [23] Docker Security Good Defaults and Tools
 [24] Docker 19.03 Release New Features
@@ -2883,8 +3011,9 @@ Kubernetes release notes: https://kubernetes.io/releases/notes/
 
 Time completed:
 	46 mins skipped for later [12]
-	Total time completed after [19] without [12]: 12:29
-	Total time completed after [19] including [12]: 13:13
+	Total time completed after [20] without [12]: 13:12
+	Total time completed after [20] including [12]: 13:56
+
 
 
 
