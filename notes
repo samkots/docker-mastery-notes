@@ -5,8 +5,8 @@ Course GitHub repo: https://github.com/BretFisher/udemy-docker-mastery
 
 ---
 
+Legend:
 [n] - section
-
 n > - chapter
 
 ---
@@ -2994,25 +2994,244 @@ Kubernetes release notes: https://kubernetes.io/releases/notes/
 
 [21] Automated CI Workflows
 
-TODO: ----- CONTINUE HERE -----
+145 > Section intro
+
+"Jenkins (usage) is declining. Complicated to set up and maintain and you spend a lot of time writing scripts and
+managing it in old school way. GitHub Actions is better. It gets the automation closer to your code: in the git repo.
+Linting, testing, vulnerability scanning, building images, possibly testing them on K8s in an automated way, all these
+things are possible and not that hard."
+
+146 > The pull request
+
+Git flow:
+	Pull Request
+		Create branch
+		Open PR			<- automation event
+		get review
+		Merge PR		<- automation event
+
+Resources:
+Git flow: https://githubflow.github.io/
+The DevOps handbook: https://itrevolution.com/product/the-devops-handbook-second-edition/
+GitHub flow in docs: https://docs.github.com/en/get-started/using-github/github-flow
+
+
+147 > Automation is the glue of DevOps
+
+Trend: git platform = automation platform
+Today's examples are in GitHub Actions. If you aren't using that, it's fine, you can emulate it with efforts(custom scripts).
+
+148 > Basic PR workflow
+
+1. You create a PR(or push to PR branch) -> that kicks off a workflow (probably through a web-hook) that builds an image
+	-> the image is tested
+2. This loop continues till the testing is successful.
+3. You merge the PR -> the automation pushes the image to your preferred registry -> deploy to server
+
+You should absolutely use linting these days and it's easy. Two popular ones: super-linter, and megalinter
+Should be done in PR on all the commits being pushed.
+
+149 > Intermediate PR workflow
+
+1. You create a PR(or push to PR branch)
+	|| -> builds an image (Dockerfile bottom can container stuff required for testing(no need to install it on the server))
+		-> unit test(fast) -> integration test(can use docker compose for DBs, backend worker processes) -> CVE scanning
+			like Snyk or Trivi
+	|| -> lint everything
+2. Loop continues until everything is successful and everyone approves.
+3. On GitHub, the PR is merged -> rebuild the image with the production stage(subset of what you had in the testing image)
+	-> push to your preferred registry -> deploy to one or more environments
+
+
+150 > Advanced PR workflow
+
+1. You create a PR(or push to PR branch)
+	|| -> builds an image
+		|| -> unit test
+		|| -> integration test
+		|| -> CVE scanning
+		|| -> kubernetes deployment smoke test(temporary cluster built in seconds to check if deployment with YAML works)
+	|| -> lint everything
+	|| -> SAST security testing (CodeQL on GitHub/Snyk Code etc.)
+2. Loop continues until everything is successful and everyone approves.
+3. On GitHub, the PR is merged -> rebuild the image with the production stage(subset of what you had in the testing image)
+	-> push to your preferred registry -> deploy to one or more environments
+
+TODO: explore:
+	- Trivi, Snyk
+	- SAST security testing: CodeQL on GitHub, Snyk Code
+	- Linters: super-linter, and megalinter
 
 
 
 [22] GitHub Actions	Workflow Examples
+151 > Section intro -> nothing much
+
+152 > Assignment
+Each chapter is a short "step" with a narrow purpose.
+First you need to learn GitHub Actions:
+	- https://www.youtube.com/watch?v=cP0I9w2coGU&themeRefresh=1
+	- https://docs.github.com/en/actions
+
+Clone the repo that contains the steps: https://github.com/BretFisher/docker-ci-automation
+Take each example and apply it to one of these apps:
+	1. Easy mode: https://github.com/BretFisher/httpenv
+		- single app, easy to fork, already has some GHAs, you can add/enhance them or delete and start fresh
+	2. Advanced mode: https://github.com/BretFisher/example-voting-app
+		- you have seen this earlier, the mono repo of 3 apps
+		- you can fork it and add GitHub Actions for each app
+		- again, already have some GHAs, you can add/enhance them or delete and start fresh
+
+153 > Add basic docker build
+
+steps-repo:01-basic-docker-build.yaml
+
+In GitHub Actions, each file is it's own workflow. It can contain many jobs. Each job has many steps.
+	Workflow kicks off based on events.
+
+Example:
+```
+on:
+  push:
+    branches:
+	  - main
+  pull_request:
+```
+This workflow will kick off whenever you push to a PR or if you push/merge to the release branch (here `main`).
+
+.... continue here ....
+
+Resources:
+YAML file: https://github.com/BretFisher/docker-ci-automation/blob/main/.github/workflows/01-basic-docker-build.yaml
+
+154 >
+155 >
+156 >
+157 >
+158 >
+159 >
+160 >
+161 >
+162 >
+163 >
+
+
+
 [23] Docker Security Good Defaults and Tools
+
+164 > Section intro: security steps for docker
+Resources:
+Bret's list of security objectives: https://github.com/BretFisher/ama/discussions/150
+
+165 > Docker cgroups and namespaces
+Resources:
+Docker engine security: https://docs.docker.com/engine/security/
+Big list of docker security tools: https://sysdig.com/blog/20-docker-security-tools/
+
+166 > Docker engine's OOTB security features
+Resources:
+Docs - seccomp security profiles: https://docs.docker.com/engine/security/seccomp/
+Docs - AppArmor security profiles: https://docs.docker.com/engine/security/apparmor/
+
+167 > Docker bench, the host configuration scanner
+Resources:
+Docker bench: https://github.com/docker/docker-bench-security
+CSI benchmark for securing docker: https://www.cisecurity.org/benchmark/docker
+
+168 > Using user in docker files to avoid running as root
+Resources:
+Sample docker file:
+https://github.com/BretFisher/nodejs-rocks-in-docker/blob/main/1.Dockerfile
+Docs USER stanza: https://docs.docker.com/reference/dockerfile/#user
+
+169 > Docker user namespace for extra host security
+Resources:
+More info on user namespaces: https://integratedcode.us/2015/10/13/user-namespaces-have-arrived-in-docker/
+Docs - how to use user namespaces: https://docs.docker.com/engine/security/userns-remap/
+
+170 > Code repo and image scanning for CVE
+
+Repo scanning: Snyk scans the repos(early in the process, doesn't wait for image building or CI).
+Don't wait, scan early as possible. This is one of the core tenets of Shift Left security.
+
+Image scanning:
+	There are lot of considerations:
+		- Does the scanner scan the images or requires to run in a running container?
+		- Does it support the distro? redhat? alpine?
+		- Does it support your package manager? npm? pip?
+
+		MicroScanner didn't do all of it. Trivy claims to be the most complete scanner.
+
+	Bret would rather scan during CI automated image build rather than scanning after building the image.
+	You might have systems that scan on the server running in production, although rare. Depends on your environment.
+	Trivy probably scans after the image is built.
+
+MicroScanner demo (during build):
+```
+ADD https://get.aquasec.com/microscanner
+RUN chmod +x /microscanner
+RUN /microscanner <TOKEN> [--continue-on-failure]
+```
+
+Refer:
+https://github.com/BretFisher/ama/discussions/150
+
+Note: you will probably have just a few images with zero vulnerabilities across the board.
+That's just the nature of open source. You have to work with your security team to see what's acceptable.
+Some vulnerabilities might not even apply to you even if they are present in your image.
+`--continue-on-failure` is needed to proceed the build even when vulnerabilities are found.
+
+Resources:
+CVE DB: https://cve.mitre.org/
+Snyk, one of the ways to scan Git repos and images: https://snyk.io/
+What is shift left security: https://www.paloaltonetworks.com/prisma/cloud
+Aqua MicroScanner to scan images during build: https://github.com/aquasecurity/microscanner
+Aqua Trivy to scan images after build: https://github.com/aquasecurity/trivy
+
+171 > Sysdig falco, content trust, and custom seccomp and AppArmor profiles
+Resources:
+System falco: https://sysdig.com/opensource/falco/
+Docker content trust: https://docs.docker.com/engine/security/trust/
+Docs seccomp security profiles: https://docs.docker.com/engine/security/seccomp/
+Docs AppArmor profiles: https://docs.docker.com/engine/security/apparmor/
+
+172 > Docker rootless mode
+Resources:
+Docs - rootless mode: https://github.com/docker-archive/engine/blob/v19.03.0-rc3/docs/rootless.md
+Docker blog - experimenting with rootless docker: https://www.docker.com/
+YouTube video on rootless mode from DockerCon 2019: https://www.youtube.com/watch?v=Qq78zfXUq18
+Rootless mode install script: https://get.docker.com/rootless
+
+173 > The security top 10 differences for Windows containers
+174 > What are distroless images?
+Resources:
+Google's "distroless" repo: https://github.com/GoogleContainerTools/distroless
+
+175 > Are swarm and kubernetes secrets really secure?
+
+
 [24] Docker 19.03 Release New Features
 [25] DovOps and Docker Clips
 [26] Dockerfiles and Docker Images in 2022
 [27] Dockerfiles and Docker Images in 2022
+[28] Extras, Common Questions, and Resources
+210 > Node.js good defaults for docker
+Repo: https://github.com/BretFisher/node-docker-good-defaults
+Contains README.md
 
+211 > PHP & docker good defaults:
+https://github.com/BretFisher/php-docker-good-defaults
+
+Laradock: https://laradock.io/ - for Laravel and docker
 
 
 
 
 Time completed:
 	46 mins skipped for later [12]
-	Total time completed after [20] without [12]: 13:12
-	Total time completed after [20] including [12]: 13:56
+	Total time completed after [21] without [12]: 13:33
+	Total time completed after [21] including [12]: 14:17
+
 
 
 
